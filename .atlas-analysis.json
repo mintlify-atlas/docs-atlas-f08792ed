@@ -1,0 +1,150 @@
+{
+  "projectType": "framework",
+  "projectName": "Dagster",
+  "projectDescription": "A cloud-native data pipeline orchestrator for the development, production, and observation of data assets.",
+  "theme": "sequoia",
+  "primaryColor": "#151d2d",
+  "lightColor": "#d8d8f7",
+  "darkColor": "#848ca0",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/assets",
+              "concepts/ops-jobs-graphs",
+              "concepts/resources",
+              "concepts/io-managers",
+              "concepts/partitions-backfills",
+              "concepts/schedules-sensors",
+              "concepts/automation"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/defining-assets",
+              "guides/testing",
+              "guides/deployment",
+              "guides/integrations",
+              "guides/observability",
+              "guides/data-quality"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/dbt",
+              "integrations/airflow",
+              "integrations/aws",
+              "integrations/databricks",
+              "integrations/snowflake"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/architecture"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Definitions",
+            "pages": [
+              "api/definitions/asset",
+              "api/definitions/op",
+              "api/definitions/job",
+              "api/definitions/graph",
+              "api/definitions/resource",
+              "api/definitions/io-manager",
+              "api/definitions/sensor",
+              "api/definitions/schedule"
+            ]
+          },
+          {
+            "group": "Execution",
+            "pages": [
+              "api/execution/context",
+              "api/execution/materialize",
+              "api/execution/output"
+            ]
+          },
+          {
+            "group": "Types & Config",
+            "pages": [
+              "api/types/config",
+              "api/types/metadata",
+              "api/types/partitions"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "api/cli/dagster",
+              "api/cli/dagster-daemon"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Declarative asset-based programming model",
+    "Built-in data lineage and observability",
+    "Integrated testing framework",
+    "Multi-tenant orchestration engine",
+    "Rich integration library for modern data tools",
+    "Partitioning and backfill support",
+    "Declarative automation and scheduling",
+    "GraphQL API and web-based UI"
+  ],
+  "publicApiSurface": [
+    "@asset",
+    "@op",
+    "@job",
+    "@graph",
+    "@schedule",
+    "@sensor",
+    "@resource",
+    "Definitions",
+    "AssetSpec",
+    "AssetSelection",
+    "ConfigurableResource",
+    "materialize",
+    "AutoMaterializePolicy",
+    "BackfillPolicy",
+    "PartitionsDefinition",
+    "DailyPartitionsDefinition",
+    "AssetCheckSpec",
+    "FreshnessPolicy",
+    "AssetKey",
+    "AssetMaterialization",
+    "Output",
+    "MetadataValue"
+  ]
+}
