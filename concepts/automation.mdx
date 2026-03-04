@@ -573,12 +573,10 @@ Benefits of migration:
 - [Assets](/concepts/assets) - Defining assets with automation
 - [Schedules & Sensors](/concepts/schedules-sensors) - Alternative automation approaches
 - [Partitions & Backfills](/concepts/partitions-backfills) - Automation with partitions
-- [Asset Checks](/concepts/asset-checks) - Quality gates for automation
+- [Data Quality](/guides/data-quality) - Quality gates for automation
 
 ## API Reference
 
-- [`AutomationCondition`](https://docs.dagster.io/api/automation#dagster.AutomationCondition) - Base automation condition
-- [`AutomationCondition.eager()`](https://docs.dagster.io/api/automation#dagster.AutomationCondition.eager) - Eager materialization
-- [`AutomationCondition.on_cron()`](https://docs.dagster.io/api/automation#dagster.AutomationCondition.on_cron) - Cron-based automation
-- [`AutomationCondition.on_missing()`](https://docs.dagster.io/api/automation#dagster.AutomationCondition.on_missing) - Materialize if missing
-- [`code_version`](https://docs.dagster.io/api/assets#dagster.asset) - Track code changes
+- [@asset](/api/definitions/asset) - Define assets with automation conditions
+- [Partitions](/api/types/partitions) - Partition definitions for automation
+- [Schedules](/api/definitions/schedule) - Alternative time-based automation
