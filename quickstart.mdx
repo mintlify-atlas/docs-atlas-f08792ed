@@ -1,80 +1,430 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Build your first data asset with Dagster in under 5 minutes"
 ---
 
-## Get started in three steps
+This quickstart will walk you through creating your first Dagster asset, running it locally, and viewing the results in the web UI.
 
-Get your documentation site running locally and make your first customization.
+## What You'll Build
 
-### Step 1: Set up your local environment
+You'll create a simple data pipeline that:
+- Loads sample data from a CSV file
+- Processes the data using Pandas
+- Saves the transformed output
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+By the end, you'll understand Dagster's core concepts and have a working local setup.
+
+## Prerequisites
+
+<Info>
+Make sure you have Dagster installed. If not, see the [Installation guide](/installation).
+</Info>
+
+## Step 1: Create Your First Asset
+
+Dagster assets represent data artifacts in your pipeline. Let's create a simple one.
+
+<Steps>
+  <Step title="Create a Python file">
+    Create a new file called `hello_dagster.py`:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```python hello_dagster.py
+    import dagster as dg
+
+    @dg.asset
+    def hello(context: dg.AssetExecutionContext):
+        context.log.info("Hello, Dagster!")
+        return "Hello from Dagster!"
+
+    @dg.asset(deps=[hello])
+    def world(context: dg.AssetExecutionContext):
+        context.log.info("World!")
+        return "Hello world pipeline complete"
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    <Note>
+    The `@dg.asset` decorator turns a Python function into a data asset. Assets with `deps` depend on other assets.
+    </Note>
+  </Step>
+  
+  <Step title="Test your asset">
+    You can materialize assets directly from Python:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```python
+    if __name__ == "__main__":
+        dg.materialize([hello, world])
+    ```
+    
+    Run the file:
+    
+    ```bash
+    python hello_dagster.py
+    ```
+    
+    You should see log output indicating successful materialization.
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Step 2: Create a Real Data Pipeline
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Now let's build something more practical with actual data processing.
 
-### Step 3: Go live
+<Steps>
+  <Step title="Create project structure">
+    ```bash
+    mkdir dagster_quickstart
+    cd dagster_quickstart
+    mkdir -p defs/data
+    ```
+  </Step>
+  
+  <Step title="Create sample data">
+    Create `defs/data/sample_data.csv`:
+    
+    ```csv defs/data/sample_data.csv
+    name,age,city
+    Alice,25,New York
+    Bob,35,San Francisco
+    Charlie,45,Chicago
+    Diana,28,Boston
+    ```
+  </Step>
+  
+  <Step title="Create your asset definition">
+    Create `defs/assets.py` with a data processing asset:
+    
+    ```python defs/assets.py
+    import pandas as pd
+    import dagster as dg
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    sample_data_file = "defs/data/sample_data.csv"
+    processed_data_file = "defs/data/processed_data.csv"
 
-## Next steps
+    @dg.asset
+    def processed_data():
+        # Read data from the CSV
+        df = pd.read_csv(sample_data_file)
+        
+        # Add an age_group column based on the value of age
+        df["age_group"] = pd.cut(
+            df["age"], 
+            bins=[0, 30, 40, 100], 
+            labels=["Young", "Middle", "Senior"]
+        )
+        
+        # Save processed data
+        df.to_csv(processed_data_file, index=False)
+        return "Data loaded successfully"
+    ```
+    
+    <Info>
+    This asset reads a CSV, adds a computed column, and saves the result. Dagster tracks when this runs and what it produces.
+    </Info>
+  </Step>
+  
+  <Step title="Create definitions file">
+    Create `definitions.py` to expose your assets:
+    
+    ```python definitions.py
+    import dagster as dg
+    from defs.assets import processed_data
 
-Now that you have your docs running, explore these key features:
+    defs = dg.Definitions(
+        assets=[processed_data]
+    )
+    ```
+  </Step>
+</Steps>
 
-<CardGroup cols={2}>
+## Step 3: Start the Dagster UI
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+<Steps>
+  <Step title="Launch the development server">
+    From your project directory, run:
+    
+    ```bash
+    dagster dev
+    ```
+    
+    <Note>
+    The `dagster dev` command starts both the Dagster daemon and web server in development mode.
+    </Note>
+    
+    You should see output like:
+    
+    ```
+    Serving dagster-webserver on http://127.0.0.1:3000 in process
+    ```
+  </Step>
+  
+  <Step title="Open the UI">
+    Open your browser to [http://localhost:3000](http://localhost:3000)
+    
+    You'll see the Dagster web interface with your asset graph.
+  </Step>
+  
+  <Step title="View your assets">
+    In the UI, you'll see:
+    - **Asset catalog** - All your defined assets
+    - **Asset lineage graph** - Visual representation of dependencies
+    - **Materialize button** - Click to run your pipeline
+    
+    The UI shows `processed_data` as a single asset ready to materialize.
+  </Step>
+</Steps>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+## Step 4: Materialize Your Asset
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+<Steps>
+  <Step title="Click Materialize">
+    In the asset view, click the **Materialize** button in the top-right corner.
+    
+    <Info>
+    "Materializing" an asset means executing the function to produce its output.
+    </Info>
+  </Step>
+  
+  <Step title="Watch the run">
+    You'll be taken to the run page where you can:
+    - See real-time logs
+    - Monitor progress
+    - View any errors or warnings
+    
+    The run should complete in a few seconds.
+  </Step>
+  
+  <Step title="Verify the output">
+    Check that `defs/data/processed_data.csv` was created with the age_group column:
+    
+    ```csv
+    name,age,city,age_group
+    Alice,25,New York,Young
+    Bob,35,San Francisco,Middle
+    Charlie,45,Chicago,Senior
+    Diana,28,Boston,Young
+    ```
+  </Step>
+</Steps>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+## Advanced Example: HackerNews Pipeline
 
-</CardGroup>
+Here's a more complex example from Dagster's official examples that fetches real data:
+
+<CodeGroup>
+
+```python topstory_ids.py
+import json
+import os
+import requests
+from dagster import asset
+
+@asset(group_name="hackernews", compute_kind="HackerNews API")
+def topstory_ids() -> None:
+    """Get up to 100 top stories from the HackerNews topstories endpoint.
+    
+    API Docs: https://github.com/HackerNews/API#new-top-and-best-stories
+    """
+    newstories_url = "https://hacker-news.firebaseio.com/v0/topstories.json"
+    top_new_story_ids = requests.get(newstories_url).json()[:100]
+    
+    os.makedirs("data", exist_ok=True)
+    with open("data/topstory_ids.json", "w") as f:
+        json.dump(top_new_story_ids, f)
+```
+
+```python topstories.py
+import json
+import requests
+import pandas as pd
+from dagster import asset, AssetExecutionContext, MaterializeResult, MetadataValue
+
+@asset(deps=[topstory_ids], group_name="hackernews", compute_kind="HackerNews API")
+def topstories(context: AssetExecutionContext) -> MaterializeResult:
+    """Get items based on story ids from the HackerNews items endpoint.
+    
+    API Docs: https://github.com/HackerNews/API#items
+    """
+    with open("data/topstory_ids.json") as f:
+        topstory_ids = json.load(f)
+    
+    results = []
+    for item_id in topstory_ids:
+        item = requests.get(
+            f"https://hacker-news.firebaseio.com/v0/item/{item_id}.json"
+        ).json()
+        results.append(item)
+        
+        if len(results) % 20 == 0:
+            context.log.info(f"Got {len(results)} items so far.")
+    
+    df = pd.DataFrame(results)
+    df.to_csv("data/topstories.csv")
+    
+    return MaterializeResult(
+        metadata={
+            "num_records": len(df),
+            "preview": MetadataValue.md(str(df.head().to_markdown())),
+        }
+    )
+```
+
+```python definitions.py
+from dagster import Definitions
+from .assets import topstory_ids, topstories
+
+defs = Definitions(
+    assets=[topstory_ids, topstories]
+)
+```
+
+</CodeGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+This example shows:
+- **Asset dependencies** - `topstories` depends on `topstory_ids`
+- **Metadata** - Attach rich information like record counts and data previews
+- **Logging** - Track progress during execution
+- **Grouping** - Organize related assets with `group_name`
 </Note>
+
+## Understanding the Asset Graph
+
+Dagster automatically builds a dependency graph from your assets:
+
+```
+topstory_ids
+      ↓
+  topstories
+      ↓
+most_frequent_words
+```
+
+The UI shows:
+- **Upstream dependencies** - Assets that must run first
+- **Downstream dependencies** - Assets that depend on this one
+- **Compute kind badges** - Visual indicators of what type of computation
+- **Last materialization** - When it was last run successfully
+
+## Development Workflow
+
+<Steps>
+  <Step title="Make changes to your code">
+    Edit your asset definitions in your Python files.
+  </Step>
+  
+  <Step title="Reload definitions">
+    In the UI, click the **Reload definitions** button (or press `Cmd+R`).
+    
+    <Tip>
+    With `dagster dev`, changes are detected automatically in most cases.
+    </Tip>
+  </Step>
+  
+  <Step title="Test your changes">
+    Materialize individual assets or subsets to test your changes without running the entire pipeline.
+  </Step>
+</Steps>
+
+## Next Steps
+
+Now that you have a working Dagster setup:
+
+<CardGroup cols={2}>
+  <Card title="Add Schedules" icon="clock" href="https://docs.dagster.io/concepts/partitions-schedules-sensors/schedules">
+    Run your pipeline automatically on a schedule
+  </Card>
+  
+  <Card title="Add Metadata" icon="tag" href="https://docs.dagster.io/concepts/metadata-tags">
+    Track data quality metrics and previews
+  </Card>
+  
+  <Card title="Use Resources" icon="database" href="https://docs.dagster.io/concepts/resources">
+    Connect to databases and external services
+  </Card>
+  
+  <Card title="Deploy to Production" icon="cloud" href="https://docs.dagster.io/deployment">
+    Take your pipeline to production
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="Asset with multiple dependencies">
+    ```python
+    @dg.asset(deps=[asset_one, asset_two])
+    def combined_asset():
+        # Access outputs from both dependencies
+        pass
+    ```
+  </Accordion>
+  
+  <Accordion title="Asset with configuration">
+    ```python
+    from dagster import Config
+    
+    class MyAssetConfig(Config):
+        api_key: str
+        max_results: int = 100
+    
+    @dg.asset
+    def configured_asset(config: MyAssetConfig):
+        # Use config.api_key and config.max_results
+        pass
+    ```
+  </Accordion>
+  
+  <Accordion title="Asset with IO Manager">
+    ```python
+    @dg.asset(io_manager_key="database_io_manager")
+    def database_asset() -> pd.DataFrame:
+        # Return DataFrame, IO manager handles storage
+        return df
+    ```
+  </Accordion>
+  
+  <Accordion title="Testing assets">
+    ```python
+    from dagster import materialize
+    
+    def test_my_asset():
+        result = materialize([my_asset])
+        assert result.success
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Warning>
+**Port already in use?**
+
+If port 3000 is already taken, specify a different port:
+
+```bash
+dagster dev -p 3001
+```
+</Warning>
+
+<AccordionGroup>
+  <Accordion title="Asset not showing in UI">
+    - Ensure your asset is included in the `Definitions` object
+    - Click **Reload definitions** in the UI
+    - Check for Python syntax errors in your code
+  </Accordion>
+  
+  <Accordion title="Import errors">
+    - Verify all dependencies are installed: `pip install pandas dagster`
+    - Check your Python path includes the project directory
+  </Accordion>
+  
+  <Accordion title="Materialization fails">
+    - Check the **Logs** tab in the run view for detailed error messages
+    - Verify file paths and permissions
+    - Ensure external APIs or databases are accessible
+  </Accordion>
+</AccordionGroup>
+
+<Info>
+**Learn More:** Explore the [official Dagster tutorial](https://docs.dagster.io/tutorial) for a comprehensive walkthrough of building production pipelines.
+</Info>

@@ -1,0 +1,201 @@
+---
+title: Dagster Documentation
+description: A cloud-native data pipeline orchestrator for the development, production, and observation of data assets
+mode: custom
+---
+
+<div className="relative bg-gradient-to-br from-[#151d2d] via-[#1a2332] to-[#0f1620] text-white py-20 overflow-hidden">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjA1KSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-40"></div>
+  
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid lg:grid-cols-12 gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+          Orchestrate your data pipelines with confidence
+        </h1>
+        <p className="text-xl lg:text-2xl text-gray-300 mb-8 max-w-2xl leading-relaxed">
+          Dagster is a cloud-native orchestrator for building, testing, and monitoring data assets throughout the entire development lifecycle.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-[#d8d8f7] hover:bg-white text-[#151d2d] font-semibold rounded-lg transition-colors no-underline"
+          >
+            Get started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a 
+            href="/api/overview" 
+            className="inline-flex items-center px-6 py-3 border-2 border-white/30 bg-white/10 hover:bg-white/20 hover:border-white/50 text-white font-semibold rounded-lg transition-colors no-underline"
+          >
+            API reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block lg:col-span-5">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-[#d8d8f7] to-[#848ca0] opacity-20 blur-3xl rounded-full"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    Quick start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get up and running with Dagster in minutes
+  </p>
+
+  <Steps>
+    <Step title="Install Dagster">
+      Install Dagster using pip or uv:
+
+      ```bash
+      pip install dagster dagster-webserver
+      ```
+
+      Or with uv:
+
+      ```bash
+      uv add dagster dagster-webserver
+      ```
+    </Step>
+
+    <Step title="Define your first asset">
+      Create a Python file with a simple data asset:
+
+      ```python my_data_pipeline.py
+      import dagster as dg
+      import pandas as pd
+
+      @dg.asset
+      def my_dataset() -> pd.DataFrame:
+          return pd.DataFrame({
+              "id": [1, 2, 3],
+              "name": ["Alice", "Bob", "Charlie"]
+          })
+      ```
+
+      Assets are the core building blocks of Dagster. Each asset represents a data object that you want to build and maintain.
+    </Step>
+
+    <Step title="Create a Definitions object">
+      Define your code location by wrapping assets in a `Definitions` object:
+
+      ```python my_data_pipeline.py
+      import dagster as dg
+      import pandas as pd
+
+      @dg.asset
+      def my_dataset() -> pd.DataFrame:
+          return pd.DataFrame({
+              "id": [1, 2, 3],
+              "name": ["Alice", "Bob", "Charlie"]
+          })
+
+      defs = dg.Definitions(
+          assets=[my_dataset]
+      )
+      ```
+    </Step>
+
+    <Step title="Launch the Dagster UI">
+      Start the Dagster web server to visualize and execute your pipeline:
+
+      ```bash
+      dagster dev -f my_data_pipeline.py
+      ```
+
+      Navigate to `http://localhost:3000` to see your asset graph and materialize your assets.
+
+      <Note>
+        The Dagster UI provides a visual interface for exploring your data lineage, monitoring runs, and debugging issues.
+      </Note>
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    Explore by topic
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Learn about Dagster's core capabilities
+  </p>
+
+  <CardGroup cols={3}>
+    <Card title="Assets" icon="cube" href="/concepts/assets">
+      Define data assets with Python functions and dependencies
+    </Card>
+    <Card title="Jobs & Ops" icon="diagram-project" href="/concepts/ops-jobs-graphs">
+      Build task-based workflows and graphs
+    </Card>
+    <Card title="Resources" icon="plug" href="/concepts/resources">
+      Configure external services and shared dependencies
+    </Card>
+    <Card title="Schedules" icon="clock" href="/concepts/schedules-sensors">
+      Automate pipeline execution on a schedule
+    </Card>
+    <Card title="Partitions" icon="table-cells" href="/concepts/partitions-backfills">
+      Process data in time windows or logical partitions
+    </Card>
+    <Card title="Testing" icon="flask" href="/guides/testing">
+      Test your data pipelines with confidence
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+    Integrations
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Connect with your existing data stack
+  </p>
+
+  <CardGroup cols={2}>
+    <Card title="dbt" icon="hammer" href="/integrations/dbt">
+      Orchestrate dbt models as Dagster assets
+    </Card>
+    <Card title="Airflow" icon="wind" href="/integrations/airflow">
+      Migrate from Airflow or run both side-by-side
+    </Card>
+    <Card title="AWS" icon="aws" href="/integrations/aws">
+      Deploy on AWS with S3, ECS, and more
+    </Card>
+    <Card title="Databricks" icon="database" href="/integrations/databricks">
+      Run Spark jobs on Databricks clusters
+    </Card>
+    <Card title="Snowflake" icon="snowflake" href="/integrations/snowflake">
+      Manage Snowflake tables and queries
+    </Card>
+    <Card title="View all" icon="grid" href="/integrations/overview">
+      Explore 100+ integrations
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-br from-[#151d2d] to-[#1a2332] dark:from-[#1a1d27] dark:to-[#151821] rounded-2xl p-8 lg:p-12 border border-gray-200 dark:border-[#27272a]">
+    <h2 className="text-3xl font-bold text-white mb-4">
+      Ready to build your data platform?
+    </h2>
+    <p className="text-xl text-gray-300 mb-6 max-w-2xl">
+      Start building production-ready data pipelines with integrated lineage, observability, and testing.
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 bg-[#d8d8f7] hover:bg-white text-[#151d2d] font-semibold rounded-lg transition-colors no-underline"
+    >
+      Get started with Dagster
+      <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+    </a>
+  </div>
+</div>

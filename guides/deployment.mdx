@@ -1,0 +1,538 @@
+---
+title: Deploying Dagster
+description: Learn how to deploy Dagster to production using Docker, Kubernetes, ECS, and other deployment options
+---
+
+Deploying Dagster to production involves setting up the Dagster daemon, webserver, and run infrastructure. This guide covers common deployment patterns and best practices.
+
+## Deployment Architecture
+
+A production Dagster deployment typically consists of:
+
+- **Dagster Webserver**: Serves the web UI and GraphQL API
+- **Dagster Daemon**: Runs schedules, sensors, and manages run queues
+- **User Code**: Your asset definitions and business logic
+- **Run Storage**: PostgreSQL database for run history and event logs
+- **Run Launcher**: Executes runs (Docker, Kubernetes, etc.)
+
+## Configuration Files
+
+Dagster uses `dagster.yaml` to configure production deployments:
+
+```yaml
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 5
+    tag_concurrency_limits:
+      - key: "operation"
+        value: "example"
+        limit: 5
+
+run_launcher:
+  module: dagster_docker
+  class: DockerRunLauncher
+  config:
+    env_vars:
+      - DAGSTER_POSTGRES_USER
+      - DAGSTER_POSTGRES_PASSWORD
+      - DAGSTER_POSTGRES_DB
+    network: docker_example_network
+    container_kwargs:
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /tmp/io_manager_storage:/tmp/io_manager_storage
+
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+```
+
+<Tip>
+Use environment variables for sensitive configuration like database passwords. Never commit credentials directly to `dagster.yaml`.
+</Tip>
+
+## Docker Deployment
+
+Docker is the simplest way to deploy Dagster for small to medium workloads.
+
+<Steps>
+
+### Create a Dockerfile
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy code
+COPY . .
+
+EXPOSE 3000
+
+CMD ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000"]
+```
+
+### Set up docker-compose
+
+```yaml
+version: "3.8"
+
+services:
+  postgresql:
+    image: postgres:14
+    environment:
+      POSTGRES_USER: dagster
+      POSTGRES_PASSWORD: dagster
+      POSTGRES_DB: dagster
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  dagster-webserver:
+    build: .
+    environment:
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: dagster
+      DAGSTER_POSTGRES_DB: dagster
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./dagster.yaml:/app/dagster.yaml
+    depends_on:
+      - postgresql
+
+  dagster-daemon:
+    build: .
+    command: dagster-daemon run
+    environment:
+      DAGSTER_POSTGRES_USER: dagster
+      DAGSTER_POSTGRES_PASSWORD: dagster
+      DAGSTER_POSTGRES_DB: dagster
+    volumes:
+      - ./dagster.yaml:/app/dagster.yaml
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - postgresql
+
+volumes:
+  postgres-data:
+```
+
+### Deploy
+
+```bash
+docker-compose up -d
+```
+
+</Steps>
+
+## Kubernetes Deployment
+
+For production workloads, Kubernetes provides scalability and reliability.
+
+### Using Helm Charts
+
+Dagster provides official Helm charts for Kubernetes deployment:
+
+```bash
+# Add the Dagster Helm repository
+helm repo add dagster https://dagster-io.github.io/helm
+helm repo update
+
+# Install Dagster
+helm install dagster dagster/dagster \
+  --set dagster-user-deployments.deployments[0].name=my-deployment \
+  --set dagster-user-deployments.deployments[0].image.repository=my-repo/my-image \
+  --set dagster-user-deployments.deployments[0].image.tag=latest
+```
+
+### Custom Values File
+
+Create a `values.yaml` for your deployment:
+
+```yaml
+global:
+  postgresqlSecretName: "dagster-postgresql-secret"
+
+dagster-webserver:
+  replicaCount: 2
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+dagster-daemon:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+dagster-user-deployments:
+  deployments:
+    - name: "my-pipeline"
+      image:
+        repository: "my-registry/my-pipeline"
+        tag: "v1.0.0"
+        pullPolicy: Always
+      dagsterApiGrpcArgs:
+        - "--module-name"
+        - "my_pipeline.definitions"
+      port: 3030
+      resources:
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+        requests:
+          cpu: 500m
+          memory: 512Mi
+
+postgresql:
+  enabled: true
+  postgresqlUsername: dagster
+  postgresqlDatabase: dagster
+  service:
+    port: 5432
+```
+
+Deploy with:
+
+```bash
+helm install dagster dagster/dagster -f values.yaml
+```
+
+## AWS ECS Deployment
+
+Deploy Dagster on AWS ECS for a managed container solution:
+
+<Steps>
+
+### Create ECS Task Definitions
+
+Define tasks for the webserver, daemon, and run launcher.
+
+### Set up RDS PostgreSQL
+
+Use AWS RDS for managed PostgreSQL storage.
+
+### Configure ALB
+
+Set up an Application Load Balancer to route traffic to the webserver.
+
+### Deploy with Terraform
+
+Use infrastructure-as-code to manage your deployment:
+
+```hcl
+resource "aws_ecs_cluster" "dagster" {
+  name = "dagster-cluster"
+}
+
+resource "aws_ecs_service" "dagster_webserver" {
+  name            = "dagster-webserver"
+  cluster         = aws_ecs_cluster.dagster.id
+  task_definition = aws_ecs_task_definition.webserver.arn
+  desired_count   = 2
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.dagster.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.dagster.arn
+    container_name   = "dagster-webserver"
+    container_port   = 3000
+  }
+}
+```
+
+</Steps>
+
+## Environment Separation
+
+Manage multiple environments (dev, staging, prod) with code locations:
+
+```python
+from dagster import Definitions
+import os
+
+class DatabaseResource(ConfigurableResource):
+    connection_string: str
+
+# Determine environment
+ENV = os.getenv("DAGSTER_ENV", "dev")
+
+if ENV == "prod":
+    db_config = DatabaseResource(
+        connection_string=os.getenv("PROD_DB_CONNECTION")
+    )
+elif ENV == "staging":
+    db_config = DatabaseResource(
+        connection_string=os.getenv("STAGING_DB_CONNECTION")
+    )
+else:
+    db_config = DatabaseResource(
+        connection_string="sqlite:///:memory:"
+    )
+
+defs = Definitions(
+    assets=[users, orders],
+    resources={
+        "database": db_config
+    },
+)
+```
+
+## Secrets Management
+
+Use environment variables and secrets managers:
+
+```python
+import os
+import dagster as dg
+
+class SnowflakeResource(dg.ConfigurableResource):
+    account: str
+    user: str
+    password: str
+    database: str
+
+    @classmethod
+    def from_env(cls):
+        return cls(
+            account=os.getenv("SNOWFLAKE_ACCOUNT"),
+            user=os.getenv("SNOWFLAKE_USER"),
+            password=os.getenv("SNOWFLAKE_PASSWORD"),
+            database=os.getenv("SNOWFLAKE_DATABASE"),
+        )
+
+defs = dg.Definitions(
+    resources={
+        "snowflake": SnowflakeResource.from_env()
+    }
+)
+```
+
+<Warning>
+Never hardcode secrets in your code or commit them to version control. Use environment variables, AWS Secrets Manager, HashiCorp Vault, or similar tools.
+</Warning>
+
+## Monitoring and Alerting
+
+Set up monitoring for your deployment:
+
+### Health Checks
+
+The webserver exposes health endpoints:
+
+```bash
+curl http://localhost:3000/server_info
+```
+
+### Metrics
+
+Integrate with Prometheus or CloudWatch:
+
+```python
+# Export metrics for monitoring
+from dagster import sensor, RunRequest, SkipReason
+import prometheus_client as prom
+
+materialize_counter = prom.Counter(
+    'dagster_materializations_total',
+    'Total asset materializations'
+)
+
+@sensor(job=my_job)
+def monitoring_sensor(context):
+    # Track metrics
+    materialize_counter.inc()
+    yield RunRequest(run_key=context.cursor)
+```
+
+## Performance Optimization
+
+### Concurrency Configuration
+
+Limit concurrent runs to prevent resource exhaustion:
+
+```yaml
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 10
+    tag_concurrency_limits:
+      - key: "database"
+        value: "warehouse"
+        limit: 3
+```
+
+### Run Retries
+
+Configure automatic retries for transient failures:
+
+```python
+from dagster import asset, RetryPolicy
+
+@asset(
+    retry_policy=RetryPolicy(
+        max_retries=3,
+        delay=30,  # seconds
+    )
+)
+def flaky_api_call():
+    # May fail transiently
+    return fetch_from_unreliable_api()
+```
+
+### Resource Limits
+
+Set resource requests and limits in Kubernetes:
+
+```yaml
+resources:
+  requests:
+    cpu: "500m"
+    memory: "512Mi"
+  limits:
+    cpu: "2000m"
+    memory: "2Gi"
+```
+
+## Deployment Checklist
+
+<Steps>
+
+### Set up PostgreSQL storage
+
+Use a managed database service for reliability.
+
+### Configure run launcher
+
+Choose Docker, Kubernetes, or another launcher based on your infrastructure.
+
+### Set up secrets management
+
+Use environment variables or a secrets manager.
+
+### Enable monitoring
+
+Set up health checks and metrics collection.
+
+### Configure backups
+
+Regularly back up your PostgreSQL database.
+
+### Set up CI/CD
+
+Automate testing and deployment of your code.
+
+### Document runbooks
+
+Create operational documentation for common tasks.
+
+</Steps>
+
+## Best Practices
+
+### Use Code Locations
+
+Separate user code from infrastructure:
+
+```python
+# workspace.yaml
+load_from:
+  - python_module:
+      module_name: my_pipeline.definitions
+      working_directory: /app
+      attribute: defs
+```
+
+### Version Your Assets
+
+Use version control and track code references:
+
+```python
+from dagster import Definitions, link_code_references_to_git
+
+my_assets = link_code_references_to_git(
+    assets_defs=[my_asset],
+    git_url="https://github.com/my-org/my-repo/",
+    git_branch="main",
+)
+```
+
+### Implement Graceful Degradation
+
+Handle failures without bringing down the entire system:
+
+```python
+@asset
+def resilient_asset():
+    try:
+        return fetch_critical_data()
+    except APIError as e:
+        # Log error and return cached data
+        logger.error(f"API failed: {e}")
+        return load_cached_data()
+```
+
+## Next Steps
+
+- Set up [Observability](/guides/observability) with sensors and monitoring
+- Implement [Data Quality](/guides/data-quality) checks
+- Explore [Integrations](/guides/integrations) for your data stack
+- Learn about [Testing](/guides/testing) in production

@@ -1,0 +1,248 @@
+---
+title: "Installation"
+description: "Install Dagster and set up your development environment"
+---
+
+Dagster is available on PyPI and officially supports Python 3.10 through Python 3.14.
+
+## Prerequisites
+
+<Info>
+Dagster requires **Python 3.10 or higher**. Before installing, verify your Python version:
+
+```bash
+python --version
+```
+</Info>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="uv (Recommended)">
+    [uv](https://docs.astral.sh/uv/) is the fastest Python package manager and is recommended for new projects.
+
+    <Steps>
+      <Step title="Install uv">
+        If you don't have uv installed:
+        
+        ```bash
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        ```
+      </Step>
+      
+      <Step title="Install Dagster">
+        Install Dagster and the web server:
+        
+        ```bash
+        uv add dagster dagster-webserver dagster-dg-cli
+        ```
+        
+        This installs:
+        - `dagster` - Core library for defining assets and pipelines
+        - `dagster-webserver` - Web UI for monitoring and orchestration
+        - `dagster-dg-cli` - Command-line tools for project management
+      </Step>
+      
+      <Step title="Verify installation">
+        Check that Dagster is installed correctly:
+        
+        ```bash
+        dagster --version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="pip">
+    Install Dagster using pip in your Python environment.
+
+    <Steps>
+      <Step title="Create virtual environment (recommended)">
+        ```bash
+        python -m venv venv
+        source venv/bin/activate  # On Windows: venv\Scripts\activate
+        ```
+      </Step>
+      
+      <Step title="Install Dagster">
+        ```bash
+        pip install dagster dagster-webserver
+        ```
+      </Step>
+      
+      <Step title="Verify installation">
+        ```bash
+        dagster --version
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="From editable source">
+    For contributors or advanced users who want to modify Dagster itself.
+
+    <Steps>
+      <Step title="Clone the repository">
+        ```bash
+        git clone https://github.com/dagster-io/dagster.git
+        cd dagster
+        ```
+      </Step>
+      
+      <Step title="Install in editable mode">
+        ```bash
+        pip install -e "python_modules/dagster[dev]"
+        pip install -e python_modules/dagster-webserver
+        ```
+        
+        <Note>
+        The `-e` flag installs in "editable mode" so local code changes apply automatically.
+        </Note>
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Optional Dependencies
+
+Dagster has a rich ecosystem of integrations. Install additional libraries as needed:
+
+<CodeGroup>
+
+```bash Docker
+pip install dagster-docker
+```
+
+```bash AWS
+pip install dagster-aws
+```
+
+```bash GCP
+pip install dagster-gcp
+```
+
+```bash Snowflake
+pip install dagster-snowflake dagster-snowflake-pandas
+```
+
+```bash dbt
+pip install dagster-dbt
+```
+
+```bash Pandas & Data
+pip install dagster-pandas dagster-duckdb
+```
+
+```bash Kubernetes
+pip install dagster-k8s
+```
+
+</CodeGroup>
+
+<Info>
+See the [full list of integrations](https://docs.dagster.io/integrations) in the official documentation.
+</Info>
+
+## Development Dependencies
+
+For testing and development, install additional tools:
+
+```bash
+pip install dagster[test]  # Testing dependencies
+pip install dagster[pyright]  # Type checking
+pip install dagster[ruff]  # Code formatting and linting
+```
+
+## Verify Your Installation
+
+Create a simple test to verify everything works:
+
+```python test_dagster.py
+import dagster as dg
+
+@dg.asset
+def hello():
+    return "Hello, Dagster!"
+
+if __name__ == "__main__":
+    result = dg.materialize([hello])
+    print("Dagster is working!")
+```
+
+Run it:
+
+```bash
+python test_dagster.py
+```
+
+You should see output indicating successful materialization.
+
+## Platform-Specific Notes
+
+<AccordionGroup>
+  <Accordion title="Windows">
+    Dagster automatically installs Windows-specific dependencies:
+    - `psutil>=1.0` for process management
+    - `pywin32!=226` for Windows API access
+    
+    <Warning>
+    Some integrations may have limited Windows support. Check individual library documentation.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="macOS with Apple Silicon">
+    Most packages work natively on Apple Silicon (M1/M2/M3). If you encounter issues:
+    
+    ```bash
+    # Use Rosetta if needed
+    arch -x86_64 pip install dagster
+    ```
+  </Accordion>
+  
+  <Accordion title="Linux">
+    Dagster works on all major Linux distributions. Ensure you have:
+    - Python development headers: `sudo apt-get install python3-dev` (Ubuntu/Debian)
+    - Build tools: `sudo apt-get install build-essential`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Tutorial" icon="rocket" href="/quickstart">
+    Build your first Dagster asset in 5 minutes
+  </Card>
+  
+  <Card title="Official Documentation" icon="book" href="https://docs.dagster.io">
+    Explore comprehensive guides and API reference
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ImportError or ModuleNotFoundError">
+    Ensure your virtual environment is activated and Dagster is installed in the correct environment:
+    
+    ```bash
+    which python  # Should point to your venv
+    pip list | grep dagster
+    ```
+  </Accordion>
+  
+  <Accordion title="Version conflicts">
+    Dagster requires specific version ranges for dependencies. If you encounter conflicts:
+    
+    ```bash
+    pip install --upgrade dagster dagster-webserver
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission errors on Linux/macOS">
+    Don't use `sudo` with pip. Instead, use a virtual environment or user installation:
+    
+    ```bash
+    pip install --user dagster dagster-webserver
+    ```
+  </Accordion>
+</AccordionGroup>

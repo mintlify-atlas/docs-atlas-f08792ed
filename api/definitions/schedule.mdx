@@ -1,0 +1,319 @@
+---
+title: "@schedule"
+description: "API reference for the @schedule decorator used to define schedules in Dagster."
+---
+
+The `@schedule` decorator creates a schedule that triggers runs of a job or asset materialization on a regular time-based cadence defined by a cron expression.
+
+## Signature
+
+```python
+@schedule(
+    cron_schedule: Union[str, Sequence[str]],
+    job_name: Optional[str] = None,
+    name: Optional[str] = None,
+    tags: Optional[Mapping[str, str]] = None,
+    tags_fn: Optional[Callable[[ScheduleEvaluationContext], Optional[Dict[str, str]]]] = None,
+    metadata: Optional[RawMetadataMapping] = None,
+    should_execute: Optional[Callable[[ScheduleEvaluationContext], bool]] = None,
+    environment_vars: Optional[Mapping[str, str]] = None,
+    execution_timezone: Optional[str] = None,
+    description: Optional[str] = None,
+    job: Optional[ExecutableDefinition] = None,
+    default_status: DefaultScheduleStatus = DefaultScheduleStatus.STOPPED,
+    required_resource_keys: Optional[Set[str]] = None,
+    target: Optional[Union[
+        CoercibleToAssetSelection,
+        AssetsDefinition,
+        JobDefinition,
+        UnresolvedAssetJobDefinition,
+    ]] = None,
+    owners: Optional[Sequence[str]] = None,
+) -> ScheduleDefinition
+```
+
+## Parameters
+
+<ParamField path="cron_schedule" type="Union[str, Sequence[str]]" required>
+  A valid cron string or sequence of cron strings specifying when the schedule will run.
+  
+  - Single cron string: `"45 23 * * 6"` (11:45 PM every Saturday)
+  - Multiple cron strings: `["45 23 * * 6", "30 9 * * 0"]` (11:45 PM Saturday and 9:30 AM Sunday)
+</ParamField>
+
+<ParamField path="name" type="Optional[str]">
+  The name of the schedule. Defaults to the name of the decorated function.
+</ParamField>
+
+<ParamField path="tags" type="Optional[Mapping[str, str]]">
+  A set of key-value tags that annotate the schedule and can be used for searching and filtering in the UI.
+  
+  Note: Either `tags` or `tags_fn` may be set, but not both.
+</ParamField>
+
+<ParamField path="tags_fn" type="Optional[Callable[[ScheduleEvaluationContext], Optional[Dict[str, str]]]]">
+  A function that generates tags to attach to the schedule's runs. Takes a `ScheduleEvaluationContext` and returns a dictionary of tags (string key-value pairs).
+  
+  Note: Either `tags` or `tags_fn` may be set, but not both.
+</ParamField>
+
+<ParamField path="metadata" type="Optional[Mapping[str, Any]]">
+  A set of metadata entries that annotate the schedule. Values will be normalized to typed `MetadataValue` objects.
+</ParamField>
+
+<ParamField path="should_execute" type="Optional[Callable[[ScheduleEvaluationContext], bool]]">
+  A function that runs at schedule execution time to determine whether a schedule should execute or skip. Takes a `ScheduleEvaluationContext` and returns a boolean (`True` if the schedule should execute). Defaults to a function that always returns `True`.
+</ParamField>
+
+<ParamField path="execution_timezone" type="Optional[str]">
+  Timezone in which the schedule should run. Supported strings are from the IANA time zone database (e.g. `"America/Los_Angeles"`).
+</ParamField>
+
+<ParamField path="description" type="Optional[str]">
+  A human-readable description of the schedule.
+</ParamField>
+
+<ParamField path="job" type="Optional[Union[GraphDefinition, JobDefinition, UnresolvedAssetJobDefinition]]">
+  The job that should execute when the schedule runs.
+</ParamField>
+
+<ParamField path="default_status" type="DefaultScheduleStatus" default="DefaultScheduleStatus.STOPPED">
+  If set to `RUNNING`, the schedule will immediately be active when starting Dagster. The default status can be overridden from the Dagster UI or via the GraphQL API.
+</ParamField>
+
+<ParamField path="required_resource_keys" type="Optional[Set[str]]">
+  The set of resource keys required by the schedule.
+</ParamField>
+
+<ParamField path="target" type="Optional[Union[CoercibleToAssetSelection, AssetsDefinition, JobDefinition, UnresolvedAssetJobDefinition]]">
+  The target that the schedule will execute. It can take `AssetSelection` objects and anything coercible to it (e.g. `str`, `Sequence[str]`, `AssetKey`, `AssetsDefinition`). It can also accept `JobDefinition` and `UnresolvedAssetJobDefinition` objects. This parameter will replace `job` and `job_name`.
+</ParamField>
+
+<ParamField path="owners" type="Optional[Sequence[str]]" beta>
+  A sequence of strings identifying the owners of the schedule.
+</ParamField>
+
+## Returns
+
+**Type:** `ScheduleDefinition`
+
+A schedule definition object.
+
+## Evaluation Function Return Values
+
+The decorated function takes a `ScheduleEvaluationContext` and may return:
+
+1. A `RunRequest` object
+2. A list of `RunRequest` objects
+3. A `SkipReason` object, providing a descriptive message of why no runs were requested
+4. Nothing (skipping without providing a reason)
+5. A run config dictionary
+6. Yield a `SkipReason` or yield one or more `RunRequest` objects
+
+## Examples
+
+### Basic Schedule
+
+```python
+from dagster import schedule, RunRequest, ScheduleEvaluationContext
+
+@schedule(cron_schedule="0 9 * * *", job=my_job)
+def daily_morning_schedule(context: ScheduleEvaluationContext):
+    return RunRequest(run_key=None)
+```
+
+### Schedule with Run Config
+
+```python
+from dagster import schedule, ScheduleEvaluationContext
+
+@schedule(
+    cron_schedule="0 0 * * 1",  # Every Monday at midnight
+    job=my_job,
+    execution_timezone="America/Los_Angeles",
+)
+def weekly_schedule(context: ScheduleEvaluationContext):
+    # Return a run config dictionary
+    return {
+        "ops": {
+            "process_data": {
+                "config": {
+                    "date": context.scheduled_execution_time.strftime("%Y-%m-%d")
+                }
+            }
+        }
+    }
+```
+
+### Schedule with Dynamic Tags
+
+```python
+from dagster import schedule, RunRequest, ScheduleEvaluationContext
+from datetime import datetime
+
+@schedule(
+    cron_schedule="0 * * * *",  # Every hour
+    job=my_job,
+    tags_fn=lambda context: {
+        "scheduled_time": context.scheduled_execution_time.isoformat(),
+        "day_of_week": context.scheduled_execution_time.strftime("%A"),
+    },
+)
+def hourly_schedule(context: ScheduleEvaluationContext):
+    return RunRequest(
+        run_key=context.scheduled_execution_time.isoformat(),
+    )
+```
+
+### Conditional Schedule
+
+```python
+from dagster import schedule, RunRequest, SkipReason, ScheduleEvaluationContext
+
+def is_business_day(context: ScheduleEvaluationContext) -> bool:
+    # 0 = Monday, 6 = Sunday
+    return context.scheduled_execution_time.weekday() < 5
+
+@schedule(
+    cron_schedule="0 9 * * *",
+    job=my_job,
+    should_execute=is_business_day,
+)
+def business_day_schedule(context: ScheduleEvaluationContext):
+    return RunRequest(run_key=None)
+```
+
+### Schedule for Asset Materialization
+
+```python
+from dagster import schedule, AssetSelection, RunRequest
+
+@schedule(
+    cron_schedule="0 0 * * *",  # Daily at midnight
+    target=AssetSelection.groups("analytics"),
+)
+def daily_analytics_schedule():
+    return RunRequest()
+```
+
+### Multiple Run Requests
+
+```python
+from dagster import schedule, RunRequest, ScheduleEvaluationContext
+
+@schedule(cron_schedule="0 0 * * 0", job=my_job)  # Weekly on Sunday
+def weekly_batch_schedule(context: ScheduleEvaluationContext):
+    # Create multiple runs for different regions
+    regions = ["us-east", "us-west", "eu-central"]
+
+    for region in regions:
+        yield RunRequest(
+            run_key=f"{region}_{context.scheduled_execution_time.isoformat()}",
+            run_config={
+                "ops": {
+                    "process_region": {"config": {"region": region}}
+                }
+            },
+            tags={"region": region},
+        )
+```
+
+### Schedule with Multiple Cron Expressions
+
+```python
+from dagster import schedule, RunRequest
+
+@schedule(
+    cron_schedule=[
+        "0 9 * * 1-5",  # Weekdays at 9 AM
+        "0 12 * * 6,0",  # Weekends at noon
+    ],
+    job=my_job,
+    execution_timezone="UTC",
+)
+def mixed_schedule():
+    return RunRequest()
+```
+
+### Schedule with Resources
+
+```python
+from dagster import schedule, RunRequest, ScheduleEvaluationContext
+
+@schedule(
+    cron_schedule="0 * * * *",
+    job=my_job,
+    required_resource_keys={"api_client"},
+)
+def api_schedule(context: ScheduleEvaluationContext):
+    api = context.resources.api_client
+    data = api.fetch_latest()
+
+    if data:
+        return RunRequest(
+            run_config={"ops": {"process": {"config": data}}}
+        )
+```
+
+### Always-On Schedule
+
+```python
+from dagster import schedule, RunRequest, DefaultScheduleStatus
+
+@schedule(
+    cron_schedule="*/5 * * * *",  # Every 5 minutes
+    job=my_job,
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+def monitoring_schedule():
+    return RunRequest()
+```
+
+### Schedule with Metadata
+
+```python
+from dagster import schedule, RunRequest, MetadataValue
+
+@schedule(
+    cron_schedule="0 0 * * *",
+    job=my_job,
+    metadata={
+        "owner": "data-team@company.com",
+        "documentation": MetadataValue.url("https://docs.example.com/schedules"),
+        "sla_hours": 4,
+    },
+    owners=["team:data-platform"],
+)
+def documented_schedule():
+    return RunRequest()
+```
+
+## Cron Expression Format
+
+Cron expressions follow the standard format:
+
+```
+* * * * *
+│ │ │ │ │
+│ │ │ │ └── Day of week (0-6, Sunday=0)
+│ │ │ └──── Month (1-12)
+│ │ └────── Day of month (1-31)
+│ └──────── Hour (0-23)
+└────────── Minute (0-59)
+```
+
+### Common Cron Patterns
+
+- `"0 0 * * *"` - Daily at midnight
+- `"0 9 * * 1-5"` - Weekdays at 9 AM
+- `"*/15 * * * *"` - Every 15 minutes
+- `"0 0 1 * *"` - First day of every month
+- `"0 0 * * 0"` - Every Sunday at midnight
+
+## Related
+
+- [@sensor](/api/definitions/sensor) - Event-driven alternative to schedules
+- [RunRequest](/api/definitions/run-request) - Request to launch a run
+- [SkipReason](/api/definitions/skip-reason) - Skip schedule evaluation with a reason
+- [ScheduleEvaluationContext](/api/definitions/schedule-evaluation-context) - Context for schedule evaluation
+- [PartitionedConfig](/api/definitions/partitioned-config) - Partition-based scheduling

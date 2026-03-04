@@ -1,0 +1,219 @@
+---
+title: "@resource"
+description: "API reference for the @resource decorator used to define resources in Dagster."
+---
+
+The `@resource` decorator is used to define a resource - a scoped way to make external resources (like database connections) available to ops and assets during job execution.
+
+## Signature
+
+```python
+@resource(
+    config_schema: Optional[ConfigSchema] = None,
+    description: Optional[str] = None,
+    required_resource_keys: Optional[AbstractSet[str]] = None,
+    version: Optional[str] = None,
+) -> ResourceDefinition
+```
+
+## Parameters
+
+<ParamField path="config_schema" type="Optional[ConfigSchema]">
+  The schema for the config. Configuration data available in `init_context.resource_config`. If not set, Dagster will accept any config provided.
+</ParamField>
+
+<ParamField path="description" type="Optional[str]">
+  A human-readable description of the resource.
+</ParamField>
+
+<ParamField path="required_resource_keys" type="Optional[Set[str]]">
+  Keys for the resources required by this resource.
+</ParamField>
+
+<ParamField path="version" type="Optional[str]" beta>
+  The version of a resource function. Two wrapped resource functions should only have the same version if they produce the same resource definition when provided with the same inputs.
+</ParamField>
+
+## Returns
+
+**Type:** `ResourceDefinition`
+
+A resource definition object.
+
+## Examples
+
+### Basic Resource
+
+```python
+from dagster import resource
+
+@resource
+def my_resource(init_context):
+    return "my_resource_value"
+```
+
+### Resource with Configuration
+
+```python
+from dagster import resource, Field, String
+
+@resource(
+    config_schema={
+        "host": Field(String, description="Database host"),
+        "port": Field(int, default_value=5432),
+    }
+)
+def database_resource(init_context):
+    host = init_context.resource_config["host"]
+    port = init_context.resource_config["port"]
+    return DatabaseConnection(host=host, port=port)
+```
+
+### Resource with Pythonic Config
+
+```python
+from dagster import resource, ConfigurableResource
+from pydantic import Field
+
+class DatabaseConfig(ConfigurableResource):
+    host: str = Field(description="Database host")
+    port: int = Field(default=5432, description="Database port")
+    username: str
+    password: str
+
+    def get_connection(self):
+        return DatabaseConnection(
+            host=self.host,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+        )
+```
+
+### Resource with Cleanup (Context Manager)
+
+```python
+from dagster import resource
+from contextlib import contextmanager
+
+@resource
+def database_resource(init_context):
+    # Setup: create connection
+    connection = DatabaseConnection()
+    try:
+        yield connection
+    finally:
+        # Teardown: close connection
+        connection.close()
+```
+
+### Resource with Dependencies
+
+```python
+from dagster import resource
+
+@resource
+def credentials_resource(init_context):
+    return {"api_key": "secret_key"}
+
+@resource(required_resource_keys={"credentials"})
+def api_client_resource(init_context):
+    credentials = init_context.resources.credentials
+    return APIClient(api_key=credentials["api_key"])
+```
+
+### Using Resources in Ops
+
+```python
+from dagster import op, job, resource, OpExecutionContext
+
+@resource
+def database_resource(init_context):
+    return DatabaseConnection()
+
+@op(required_resource_keys={"database"})
+def query_database(context: OpExecutionContext):
+    db = context.resources.database
+    return db.query("SELECT * FROM users")
+
+@job(resource_defs={"database": database_resource})
+def database_job():
+    query_database()
+```
+
+### Using Resources in Assets
+
+```python
+from dagster import asset, Definitions, ConfigurableResource
+
+class MyDatabaseResource(ConfigurableResource):
+    connection_string: str
+
+    def query(self, sql: str):
+        # Execute query
+        return results
+
+@asset
+def my_asset(database: MyDatabaseResource):
+    # Resource is automatically provided
+    return database.query("SELECT * FROM table")
+
+defs = Definitions(
+    assets=[my_asset],
+    resources={
+        "database": MyDatabaseResource(
+            connection_string="postgresql://localhost/mydb"
+        )
+    },
+)
+```
+
+### Hardcoded Resource (for Testing)
+
+```python
+from dagster import ResourceDefinition
+
+# For production
+production_db = database_resource.configured({
+    "host": "prod.database.com",
+    "port": 5432,
+})
+
+# For testing - no initialization needed
+test_db = ResourceDefinition.hardcoded_resource(
+    MockDatabase(),
+    description="Mock database for testing"
+)
+```
+
+### Mock Resource
+
+```python
+from dagster import ResourceDefinition
+
+# Creates a resource that returns a MagicMock
+mock_api = ResourceDefinition.mock_resource(
+    description="Mock API client for testing"
+)
+```
+
+### String Resource Helper
+
+```python
+from dagster import ResourceDefinition
+
+# Simple resource that just stores a string value
+api_key_resource = ResourceDefinition.string_resource(
+    description="API key for external service"
+)
+
+# Used with config
+api_key_resource.configured("my-secret-api-key")
+```
+
+## Related
+
+- [ConfigurableResource](/api/definitions/configurable-resource) - Modern Pythonic resource definition
+- [InitResourceContext](/api/definitions/init-resource-context) - Context available to resource functions
+- [@io_manager](/api/definitions/io-manager) - Special type of resource for I/O
+- [Definitions](/api/definitions/definitions) - Define resources in your code location

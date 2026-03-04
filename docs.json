@@ -1,122 +1,133 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Dagster",
+  "theme": "sequoia",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#151d2d",
+    "light": "#d8d8f7",
+    "dark": "#848ca0"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/f6d6860c-d71c-4264-bced-3d332696b236.png",
+  "logo": {
+    "light": "https://media.brand.dev/783f271a-31f8-4039-980e-11dd310363a2.png",
+    "dark": "https://media.brand.dev/783f271a-31f8-4039-980e-11dd310363a2.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/dagster-io/dagster"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/dagster-io/dagster"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/assets",
+              "concepts/ops-jobs-graphs",
+              "concepts/resources",
+              "concepts/io-managers",
+              "concepts/partitions-backfills",
+              "concepts/schedules-sensors",
+              "concepts/automation"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/defining-assets",
+              "guides/testing",
+              "guides/deployment",
+              "guides/integrations",
+              "guides/observability",
+              "guides/data-quality"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Integrations",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "integrations/overview",
+              "integrations/dbt",
+              "integrations/airflow",
+              "integrations/aws",
+              "integrations/databricks",
+              "integrations/snowflake"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/docker",
+              "deployment/kubernetes",
+              "deployment/architecture"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "api/overview"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Definitions",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/definitions/asset",
+              "api/definitions/op",
+              "api/definitions/job",
+              "api/definitions/graph",
+              "api/definitions/resource",
+              "api/definitions/io-manager",
+              "api/definitions/sensor",
+              "api/definitions/schedule"
+            ]
+          },
+          {
+            "group": "Execution",
+            "pages": [
+              "api/execution/context",
+              "api/execution/materialize",
+              "api/execution/output"
+            ]
+          },
+          {
+            "group": "Types & Config",
+            "pages": [
+              "api/types/config",
+              "api/types/metadata",
+              "api/types/partitions"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "api/cli/dagster",
+              "api/cli/dagster-daemon"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

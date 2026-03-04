@@ -1,0 +1,373 @@
+---
+title: Docker Deployment
+description: Deploy Dagster using Docker and Docker Compose with real production examples
+---
+
+# Docker Deployment
+
+Dagster can be deployed using Docker containers orchestrated with Docker Compose. This approach is ideal for development, testing, and smaller production workloads.
+
+## Architecture
+
+A Docker-based Dagster deployment consists of four containers:
+
+- **PostgreSQL** - Persistent storage for runs, schedules, and events
+- **User Code** - gRPC server exposing your Dagster definitions
+- **Webserver** - UI and GraphQL API
+- **Daemon** - Schedules, sensors, and run coordination
+
+## Complete Example
+
+This example is from the official Dagster repository at `examples/deploy_docker`.
+
+### Docker Compose Configuration
+
+```yaml title="docker-compose.yml"
+version: "3.7"
+
+services:
+  # PostgreSQL database for Dagster storage
+  docker_example_postgresql:
+    image: postgres:11
+    container_name: docker_example_postgresql
+    environment:
+      POSTGRES_USER: "postgres_user"
+      POSTGRES_PASSWORD: "postgres_password"
+      POSTGRES_DB: "postgres_db"
+    networks:
+      - docker_example_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres_user -d postgres_db"]
+      interval: 10s
+      timeout: 8s
+      retries: 5
+
+  # User code gRPC server
+  docker_example_user_code:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_user_code
+    container_name: docker_example_user_code
+    image: docker_example_user_code_image
+    restart: always
+    environment:
+      DAGSTER_POSTGRES_USER: "postgres_user"
+      DAGSTER_POSTGRES_PASSWORD: "postgres_password"
+      DAGSTER_POSTGRES_DB: "postgres_db"
+      DAGSTER_CURRENT_IMAGE: "docker_example_user_code_image"
+    networks:
+      - docker_example_network
+
+  # Dagster webserver
+  docker_example_webserver:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dagster
+    entrypoint:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -w
+      - workspace.yaml
+    container_name: docker_example_webserver
+    expose:
+      - "3000"
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_POSTGRES_USER: "postgres_user"
+      DAGSTER_POSTGRES_PASSWORD: "postgres_password"
+      DAGSTER_POSTGRES_DB: "postgres_db"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    networks:
+      - docker_example_network
+    depends_on:
+      docker_example_postgresql:
+        condition: service_healthy
+      docker_example_user_code:
+        condition: service_started
+
+  # Dagster daemon
+  docker_example_daemon:
+    build:
+      context: .
+      dockerfile: ./Dockerfile_dagster
+    entrypoint:
+      - dagster-daemon
+      - run
+    container_name: docker_example_daemon
+    restart: on-failure
+    environment:
+      DAGSTER_POSTGRES_USER: "postgres_user"
+      DAGSTER_POSTGRES_PASSWORD: "postgres_password"
+      DAGSTER_POSTGRES_DB: "postgres_db"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    networks:
+      - docker_example_network
+    depends_on:
+      docker_example_postgresql:
+        condition: service_healthy
+      docker_example_user_code:
+        condition: service_started
+
+networks:
+  docker_example_network:
+    driver: bridge
+    name: docker_example_network
+```
+
+### Dockerfiles
+
+<CodeGroup>
+
+```dockerfile title="Dockerfile_dagster"
+# Dagster webserver and daemon image
+FROM python:3.10-slim
+
+RUN pip install \
+    dagster \
+    dagster-graphql \
+    dagster-webserver \
+    dagster-postgres \
+    dagster-docker
+
+# Set $DAGSTER_HOME and copy instance configuration
+ENV DAGSTER_HOME=/opt/dagster/dagster_home/
+
+RUN mkdir -p $DAGSTER_HOME
+
+COPY dagster.yaml workspace.yaml $DAGSTER_HOME
+
+WORKDIR $DAGSTER_HOME
+```
+
+```dockerfile title="Dockerfile_user_code"
+# User code gRPC server image
+FROM python:3.10-slim
+
+RUN pip install \
+    dagster \
+    dagster-postgres \
+    dagster-docker
+
+# Add your Dagster code
+WORKDIR /opt/dagster/app
+
+COPY definitions.py /opt/dagster/app
+
+# Expose gRPC port
+EXPOSE 4000
+
+# Start gRPC server
+CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-f", "definitions.py"]
+```
+
+</CodeGroup>
+
+### Instance Configuration
+
+```yaml title="dagster.yaml"
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 5
+    tag_concurrency_limits:
+      - key: "operation"
+        value: "example"
+        limit: 5
+
+run_launcher:
+  module: dagster_docker
+  class: DockerRunLauncher
+  config:
+    env_vars:
+      - DAGSTER_POSTGRES_USER
+      - DAGSTER_POSTGRES_PASSWORD
+      - DAGSTER_POSTGRES_DB
+    network: docker_example_network
+    container_kwargs:
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - /tmp/io_manager_storage:/tmp/io_manager_storage
+
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname: docker_example_postgresql
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+```
+
+### Workspace Configuration
+
+```yaml title="workspace.yaml"
+load_from:
+  - grpc_server:
+      host: docker_example_user_code
+      port: 4000
+      location_name: "example_user_code"
+```
+
+## Example Dagster Code
+
+```python title="definitions.py"
+import dagster as dg
+
+@dg.asset(
+    op_tags={"operation": "example"},
+    partitions_def=dg.DailyPartitionsDefinition("2024-01-01"),
+)
+def example_asset(context: dg.AssetExecutionContext):
+    context.log.info(context.partition_key)
+
+partitioned_asset_job = dg.define_asset_job("partitioned_job", selection=[example_asset])
+
+defs = dg.Definitions(assets=[example_asset], jobs=[partitioned_asset_job])
+```
+
+## Deployment Steps
+
+<Steps>
+  <Step title="Build images">
+    Build the Docker images for your deployment:
+    
+    ```bash
+    docker-compose build
+    ```
+  </Step>
+
+  <Step title="Start services">
+    Launch all services:
+    
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+
+  <Step title="Verify deployment">
+    Check that all containers are running:
+    
+    ```bash
+    docker-compose ps
+    ```
+    
+    Access the UI at http://localhost:3000
+  </Step>
+</Steps>
+
+## Production Considerations
+
+<Warning>
+  The Docker socket mount (`/var/run/docker.sock`) allows Dagster to launch new containers. Ensure proper security measures in production environments.
+</Warning>
+
+### Security Best Practices
+
+- Use Docker secrets for sensitive credentials instead of environment variables
+- Implement network policies to restrict container communication
+- Run containers with non-root users
+- Use read-only file systems where possible
+
+### Scaling
+
+- The webserver can be scaled horizontally by running multiple replicas
+- Only one daemon instance should run per deployment
+- Each code location should have exactly one replica
+
+### Monitoring
+
+```yaml title="docker-compose.yml (monitoring addition)"
+services:
+  # Add health checks to services
+  docker_example_webserver:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/server_info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+```
+
+## Managing the Deployment
+
+<CodeGroup>
+
+```bash title="View logs"
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f docker_example_webserver
+```
+
+```bash title="Restart services"
+# Restart all
+docker-compose restart
+
+# Restart specific service
+docker-compose restart docker_example_daemon
+```
+
+```bash title="Stop deployment"
+docker-compose down
+
+# Remove volumes
+docker-compose down -v
+```
+
+</CodeGroup>
+
+<Info>
+  For production workloads requiring high availability and automatic scaling, consider deploying to [Kubernetes with Helm](/deployment/kubernetes).
+</Info>
+
+## Next Steps
+
+- [Configure compute log storage](/deployment/architecture#compute-logs)
+- [Set up monitoring and alerts](/deployment/architecture#monitoring)
+- [Deploy to Kubernetes](/deployment/kubernetes)

@@ -1,0 +1,1163 @@
+---
+title: dagster CLI
+description: Complete reference for the dagster command-line interface
+---
+
+# dagster CLI
+
+The `dagster` command-line interface provides tools for working with Dagster projects, including job execution, asset materialization, schedule management, and development workflows.
+
+## Installation
+
+```bash
+pip install dagster
+```
+
+## Global Options
+
+<ParamField path="--version" type="flag">
+  Show the installed Dagster version
+</ParamField>
+
+<ParamField path="--help" type="flag">
+  Show help message and exit
+</ParamField>
+
+---
+
+## dagster dev
+
+Start a local development deployment of Dagster, including the webserver and daemon.
+
+<Info>
+  **Superseded**: This command is being replaced by `dg dev`. The `dagster dev` command will continue to work but consider migrating to the new CLI.
+</Info>
+
+### Usage
+
+```bash
+dagster dev [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--code-server-log-level" type="choice" default="warning">
+  Set the log level for code servers spun up by dagster services
+  
+  **Choices**: `critical`, `error`, `warning`, `info`, `debug`
+</ParamField>
+
+<ParamField path="--log-level" type="choice" default="info">
+  Set the log level for dagster services
+  
+  **Choices**: `critical`, `error`, `warning`, `info`, `debug`
+</ParamField>
+
+<ParamField path="--log-format" type="choice" default="colored">
+  Format of the logs for dagster services
+  
+  **Choices**: `colored`, `json`, `rich`
+</ParamField>
+
+<ParamField path="--port" type="integer">
+  Port to use for the Dagster webserver
+  
+  **Aliases**: `--dagit-port`, `-p`
+</ParamField>
+
+<ParamField path="--host" type="string">
+  Host to use for the Dagster webserver
+  
+  **Aliases**: `--dagit-host`, `-h`
+</ParamField>
+
+<ParamField path="--live-data-poll-rate" type="string" default="2000">
+  Rate at which the dagster UI polls for updated asset data (in milliseconds)
+</ParamField>
+
+<ParamField path="--use-legacy-code-server-behavior" type="flag">
+  Use the legacy behavior of the daemon and webserver each starting up their own code server
+</ParamField>
+
+<ParamField path="-v, --verbose" type="flag">
+  Show verbose stack traces for errors in the code server
+</ParamField>
+
+### Workspace Options
+
+<ParamField path="-w, --workspace" type="path">
+  Path to workspace file. Argument can be provided multiple times
+</ParamField>
+
+<ParamField path="-f, --python-file" type="path">
+  Path to a Python file containing Dagster definitions
+</ParamField>
+
+<ParamField path="-m, --module-name" type="string">
+  Python module containing Dagster definitions
+</ParamField>
+
+<ParamField path="-d, --working-directory" type="path">
+  Working directory to use when loading the repository or job
+</ParamField>
+
+<ParamField path="-a, --attribute" type="string">
+  Attribute within the module or file that defines the Definitions object
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash Basic Usage
+# Start development server with default settings
+dagster dev
+```
+
+```bash Custom Port
+# Start on a specific port
+dagster dev --port 3001
+```
+
+```bash With Python File
+# Point to a specific Python file
+dagster dev -f my_project/definitions.py
+```
+
+```bash With Module
+# Load from a Python module
+dagster dev -m my_project.definitions
+```
+
+```bash Debug Mode
+# Enable verbose logging
+dagster dev --log-level debug --verbose
+```
+</CodeGroup>
+
+### Output
+
+```
+Launching Dagster services...
+
+Serving dagster-webserver on http://127.0.0.1:3000 in process 12345
+Starting dagster-daemon in process 12346
+```
+
+### Environment Variables
+
+- `DAGSTER_HOME`: Directory for Dagster instance configuration (dagster.yaml)
+- `DAGSTER_IS_DEV_CLI`: Automatically set to "1" when using dagster dev
+
+---
+
+## dagster job
+
+Commands for working with Dagster jobs.
+
+### dagster job list
+
+List all jobs in a repository.
+
+```bash
+dagster job list [OPTIONS]
+```
+
+#### Example
+
+```bash
+dagster job list -f my_jobs.py
+```
+
+#### Output
+
+```
+Repository my_repo
+******************
+Job: daily_sales_job
+Description:
+    Process daily sales data and update reports
+Ops: (Execution Order)
+    load_data
+    transform_data
+    generate_report
+```
+
+### dagster job print
+
+Print detailed information about a job.
+
+```bash
+dagster job print [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--verbose" type="flag">
+  Show detailed op information including inputs and outputs
+</ParamField>
+
+<ParamField path="-j, --job" type="string">
+  Name of the job to print
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Basic
+dagster job print -f my_jobs.py -j my_job
+```
+
+```bash Verbose
+dagster job print -f my_jobs.py -j my_job --verbose
+```
+</CodeGroup>
+
+### dagster job execute
+
+Execute a job in the same Python environment.
+
+<Info>
+  **Superseded**: Use `dg launch --job <job_name>` instead for new projects.
+</Info>
+
+```bash
+dagster job execute [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="-j, --job" type="string">
+  Name of the job to execute
+</ParamField>
+
+<ParamField path="-c, --config" type="path">
+  YAML or JSON file with run configuration. Can be specified multiple times
+</ParamField>
+
+<ParamField path="--tags" type="json">
+  JSON string of tags to use for this job run
+  
+  **Example**: `'{"team": "data", "priority": "high"}'`
+</ParamField>
+
+<ParamField path="-o, --op-selection" type="string">
+  Specify op subselection to execute
+  
+  **Examples**:
+  - `some_op` - Execute only this op
+  - `*some_op` - Execute this op and all ancestors
+  - `*some_op+++` - Execute this op, ancestors, and descendants within 3 levels
+  - `*some_op,other_op+` - Multiple selections
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Basic Execution
+dagster job execute -f jobs.py -j my_job
+```
+
+```bash With Config
+dagster job execute -f jobs.py -j my_job -c config.yaml
+```
+
+```bash With Tags
+dagster job execute \
+  -f jobs.py \
+  -j my_job \
+  --tags '{"owner": "data-team"}'
+```
+
+```bash Op Selection
+# Execute only specific ops
+dagster job execute -f jobs.py -j my_job -o "*transform_data"
+```
+</CodeGroup>
+
+### dagster job launch
+
+Launch a job using the configured run launcher.
+
+```bash
+dagster job launch [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="-j, --job" type="string">
+  Name of the job to launch
+</ParamField>
+
+<ParamField path="-c, --config" type="path">
+  YAML or JSON file with run configuration
+</ParamField>
+
+<ParamField path="--config-json" type="json">
+  JSON string of run config (cannot be used with -c/--config)
+</ParamField>
+
+<ParamField path="--tags" type="json">
+  JSON string of tags for the run
+</ParamField>
+
+<ParamField path="--run-id" type="string">
+  Custom ID for the launched run
+</ParamField>
+
+<ParamField path="-o, --op-selection" type="string">
+  Op subselection to execute
+</ParamField>
+
+#### Example
+
+```bash
+dagster job launch -w workspace.yaml -j my_job -c config.yaml
+```
+
+### dagster job scaffold_config
+
+Generate a configuration scaffold for a job.
+
+```bash
+dagster job scaffold_config [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--print-only-required" type="flag">
+  Only include required configuration fields
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Full Scaffold
+dagster job scaffold_config -f jobs.py -j my_job
+```
+
+```bash Required Only
+dagster job scaffold_config -f jobs.py -j my_job --print-only-required
+```
+</CodeGroup>
+
+#### Output
+
+```yaml
+ops:
+  load_data:
+    config:
+      database_url: "<database_url>"
+      table_name: "<table_name>"
+  transform_data:
+    config:
+      transformation_type: "<transformation_type>"
+```
+
+### dagster job backfill
+
+Backfill a partitioned job.
+
+```bash
+dagster job backfill [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--partitions" type="string">
+  Comma-separated list of partition names to backfill
+</ParamField>
+
+<ParamField path="--all" type="flag">
+  Select all partitions to backfill
+</ParamField>
+
+<ParamField path="--from" type="string">
+  Start partition for the backfill range
+</ParamField>
+
+<ParamField path="--to" type="string">
+  End partition for the backfill range
+</ParamField>
+
+<ParamField path="--tags" type="json">
+  JSON string of tags for the backfill runs
+</ParamField>
+
+<ParamField path="--noprompt" type="flag">
+  Skip confirmation prompt
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Date Range
+dagster job backfill \
+  -w workspace.yaml \
+  -j daily_partitioned_job \
+  --from 2024-01-01 \
+  --to 2024-01-31
+```
+
+```bash Specific Partitions
+dagster job backfill \
+  -w workspace.yaml \
+  -j my_job \
+  --partitions "2024-01-01,2024-01-15,2024-02-01"
+```
+
+```bash All Partitions
+dagster job backfill -w workspace.yaml -j my_job --all --noprompt
+```
+</CodeGroup>
+
+---
+
+## dagster asset
+
+Commands for working with Dagster assets.
+
+### dagster asset materialize
+
+Execute a run to materialize a selection of assets.
+
+<Info>
+  **Superseded**: Use `dg launch --assets <selection>` instead.
+</Info>
+
+```bash
+dagster asset materialize [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--select" type="string" required>
+  Comma-separated asset selection to target
+  
+  **Examples**:
+  - `my_asset` - Single asset
+  - `my_asset*` - Asset and all downstream dependencies
+  - `*my_asset` - Asset and all upstream dependencies
+  - `tag:team=data` - All assets with tag
+</ParamField>
+
+<ParamField path="--partition" type="string">
+  Asset partition to target
+</ParamField>
+
+<ParamField path="--partition-range" type="string">
+  Asset partition range in format `<start>...<end>`. Requires all assets to have `BackfillPolicy.single_run()` policy
+  
+  **Example**: `2025-01-01...2025-01-05`
+</ParamField>
+
+<ParamField path="-c, --config" type="path">
+  YAML or JSON file with run configuration
+</ParamField>
+
+<ParamField path="--config-json" type="json">
+  JSON string of run config
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Single Asset
+dagster asset materialize --select my_asset -f definitions.py
+```
+
+```bash Multiple Assets
+dagster asset materialize --select "asset_a,asset_b,asset_c" -f definitions.py
+```
+
+```bash With Dependencies
+dagster asset materialize --select "my_asset*" -f definitions.py
+```
+
+```bash Partitioned Asset
+dagster asset materialize \
+  --select daily_metrics \
+  --partition 2024-01-15 \
+  -f definitions.py
+```
+
+```bash Partition Range
+dagster asset materialize \
+  --select daily_metrics \
+  --partition-range "2024-01-01...2024-01-31" \
+  -f definitions.py
+```
+</CodeGroup>
+
+### dagster asset list
+
+List assets in a repository.
+
+```bash
+dagster asset list [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--select" type="string">
+  Asset selection to filter the list
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash All Assets
+dagster asset list -f definitions.py
+```
+
+```bash Filtered Selection
+dagster asset list --select "tag:team=analytics" -f definitions.py
+```
+</CodeGroup>
+
+#### Output
+
+```
+analytics/daily_sales
+analytics/monthly_report
+raw_data/customer_events
+```
+
+### dagster asset wipe
+
+Eliminate asset key indexes from event logs.
+
+<Info>
+  **Warning**: This operation cannot be undone. Use with caution.
+</Info>
+
+```bash
+dagster asset wipe [OPTIONS] [KEY]...
+```
+
+#### Options
+
+<ParamField path="--all" type="flag">
+  Eliminate all asset key indexes
+</ParamField>
+
+<ParamField path="--noprompt" type="flag">
+  Skip confirmation prompt
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Single Asset
+dagster asset wipe my_asset_key
+```
+
+```bash Multiple Assets
+dagster asset wipe asset_one asset_two asset_three
+```
+
+```bash All Assets
+dagster asset wipe --all --noprompt
+```
+</CodeGroup>
+
+### dagster asset wipe-partitions-status-cache
+
+Clear the asset partitions status cache.
+
+```bash
+dagster asset wipe-partitions-status-cache [OPTIONS] [KEY]...
+```
+
+#### Options
+
+<ParamField path="--all" type="flag">
+  Wipe partitions status cache of all asset keys
+</ParamField>
+
+<ParamField path="--noprompt" type="flag">
+  Skip confirmation prompt
+</ParamField>
+
+#### Example
+
+```bash
+dagster asset wipe-partitions-status-cache my_asset --noprompt
+```
+
+---
+
+## dagster run
+
+Commands for working with Dagster job runs.
+
+### dagster run list
+
+List runs in the current Dagster instance.
+
+```bash
+dagster run list [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--limit" type="integer">
+  Limit the number of runs to display
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash All Runs
+dagster run list
+```
+
+```bash Limited
+dagster run list --limit 10
+```
+</CodeGroup>
+
+#### Output
+
+```
+Run: 1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+     Job: daily_pipeline
+Run: 2b3c4d5e-6f7g-8h9i-0j1k-l2m3n4o5p6q7
+     Job: weekly_report
+```
+
+### dagster run delete
+
+Delete a run by ID and its associated event logs.
+
+<Info>
+  **Warning**: This operation cannot be undone.
+</Info>
+
+```bash
+dagster run delete [OPTIONS] RUN_ID
+```
+
+#### Options
+
+<ParamField path="-f, --force" type="flag">
+  Skip confirmation prompt
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Interactive
+dagster run delete 1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6
+```
+
+```bash Force
+dagster run delete 1a2b3c4d-5e6f-7g8h-9i0j-k1l2m3n4o5p6 --force
+```
+</CodeGroup>
+
+### dagster run wipe
+
+Eliminate all run history and event logs.
+
+<Info>
+  **Warning**: This operation cannot be undone and will delete ALL runs.
+</Info>
+
+```bash
+dagster run wipe [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="-f, --force" type="flag">
+  Skip confirmation prompt
+</ParamField>
+
+#### Example
+
+```bash
+dagster run wipe --force
+```
+
+### dagster run migrate-repository
+
+Migrate run history for a job from a historic repository to its current repository.
+
+```bash
+dagster run migrate-repository [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--from" type="string" required>
+  Source repository in format `<repository_name>@<location_name>`
+</ParamField>
+
+<ParamField path="-j, --job" type="string">
+  Name of the job to migrate
+</ParamField>
+
+#### Example
+
+```bash
+dagster run migrate-repository \
+  --from old_repo@old_location \
+  -w workspace.yaml \
+  -j my_job
+```
+
+---
+
+## dagster schedule
+
+Commands for working with Dagster schedules.
+
+### dagster schedule list
+
+List all schedules in a repository.
+
+```bash
+dagster schedule list [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--running" type="flag">
+  Filter for running schedules only
+</ParamField>
+
+<ParamField path="--stopped" type="flag">
+  Filter for stopped schedules only
+</ParamField>
+
+<ParamField path="--name" type="flag">
+  Display only schedule names (no details)
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash All Schedules
+dagster schedule list -w workspace.yaml
+```
+
+```bash Running Only
+dagster schedule list -w workspace.yaml --running
+```
+
+```bash Names Only
+dagster schedule list -w workspace.yaml --name
+```
+</CodeGroup>
+
+#### Output
+
+```
+Repository my_repo
+******************
+Schedule: daily_refresh [RUNNING]
+Cron Schedule: 0 0 * * *
+**********************************
+Schedule: weekly_report [STOPPED]
+Cron Schedule: 0 0 * * 0
+```
+
+### dagster schedule start
+
+Start an existing schedule.
+
+```bash
+dagster schedule start [OPTIONS] [SCHEDULE_NAME]
+```
+
+#### Options
+
+<ParamField path="--start-all" type="flag">
+  Start all schedules in the repository
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Single Schedule
+dagster schedule start daily_refresh -w workspace.yaml
+```
+
+```bash All Schedules
+dagster schedule start --start-all -w workspace.yaml
+```
+</CodeGroup>
+
+### dagster schedule stop
+
+Stop a running schedule.
+
+```bash
+dagster schedule stop [OPTIONS] SCHEDULE_NAME
+```
+
+#### Example
+
+```bash
+dagster schedule stop daily_refresh -w workspace.yaml
+```
+
+### dagster schedule restart
+
+Restart a running schedule.
+
+```bash
+dagster schedule restart [OPTIONS] [SCHEDULE_NAME]
+```
+
+#### Options
+
+<ParamField path="--restart-all-running" type="flag">
+  Restart all currently running schedules
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Single Schedule
+dagster schedule restart daily_refresh -w workspace.yaml
+```
+
+```bash All Running
+dagster schedule restart --restart-all-running -w workspace.yaml
+```
+</CodeGroup>
+
+### dagster schedule preview
+
+Preview changes that will be performed by `dagster schedule up`.
+
+```bash
+dagster schedule preview -w workspace.yaml
+```
+
+### dagster schedule logs
+
+Get logs for a schedule.
+
+```bash
+dagster schedule logs SCHEDULE_NAME -w workspace.yaml
+```
+
+### dagster schedule wipe
+
+Delete all schedule history and turn off all schedules.
+
+<Info>
+  **Warning**: Cannot be undone.
+</Info>
+
+```bash
+dagster schedule wipe
+```
+
+### dagster schedule debug
+
+Show debug information about the scheduler.
+
+```bash
+dagster schedule debug
+```
+
+---
+
+## dagster instance
+
+Commands for working with the current Dagster instance.
+
+### dagster instance info
+
+Display information about the current instance.
+
+```bash
+dagster instance info
+```
+
+#### Output
+
+```
+$DAGSTER_HOME: /Users/username/.dagster
+
+Instance configuration:
+-----------------------
+storage:
+  sqlite:
+    base_dir: /Users/username/.dagster/history
+
+Storage schema state:
+---------------------
+Run storage: Up to date
+Event log storage: Up to date
+Schedule storage: Up to date
+```
+
+### dagster instance migrate
+
+Automatically migrate an out-of-date instance.
+
+```bash
+dagster instance migrate [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--bigint-migration" type="flag">
+  Run an optional bigint migration for ID columns
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Standard Migration
+dagster instance migrate
+```
+
+```bash BigInt Migration
+dagster instance migrate --bigint-migration
+```
+</CodeGroup>
+
+### dagster instance reindex
+
+Rebuild indexes over historical runs for improved performance.
+
+```bash
+dagster instance reindex
+```
+
+### dagster instance concurrency
+
+Commands for managing instance-wide op concurrency limits.
+
+#### dagster instance concurrency get
+
+Get op concurrency limits.
+
+```bash
+dagster instance concurrency get [OPTIONS] [KEY]
+```
+
+**Options:**
+
+<ParamField path="--all" type="flag">
+  Get info on all instance op concurrency limits
+</ParamField>
+
+**Example:**
+
+<CodeGroup>
+```bash Single Key
+dagster instance concurrency get my_concurrency_key
+```
+
+```bash All Keys
+dagster instance concurrency get --all
+```
+</CodeGroup>
+
+**Output:**
+
+```
+"my_concurrency_key": 2 / 10 slots occupied
+```
+
+#### dagster instance concurrency set
+
+Set op concurrency limits.
+
+```bash
+dagster instance concurrency set KEY LIMIT
+```
+
+**Example:**
+
+```bash
+dagster instance concurrency set database_operations 5
+```
+
+---
+
+## dagster project
+
+Commands for bootstrapping new Dagster projects and code locations.
+
+### dagster project scaffold
+
+Create a folder structure with a single Dagster code location.
+
+<Info>
+  **Superseded**: Use `create-dagster project` instead.
+</Info>
+
+```bash
+dagster project scaffold [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--name" type="string" required>
+  Name of the new Dagster project
+</ParamField>
+
+<ParamField path="--excludes" type="string">
+  Exclude file patterns from the project template. Can be specified multiple times
+  
+  **Valid patterns**: `readme.md`, `setup`, `tests` (case-insensitive)
+</ParamField>
+
+<ParamField path="--ignore-package-conflict" type="flag">
+  Skip checking for PyPI package name conflicts
+</ParamField>
+
+#### Example
+
+<CodeGroup>
+```bash Basic
+dagster project scaffold --name my_dagster_project
+```
+
+```bash Minimal
+dagster project scaffold --name my_project --excludes readme.md --excludes tests
+```
+</CodeGroup>
+
+### dagster project from-example
+
+Download an official Dagster example to the current directory.
+
+```bash
+dagster project from-example [OPTIONS]
+```
+
+#### Options
+
+<ParamField path="--name" type="string">
+  Name for the new project directory
+</ParamField>
+
+<ParamField path="--example" type="string" required>
+  Name of the example to download
+</ParamField>
+
+<ParamField path="--version" type="string">
+  Version of the example to download (defaults to installed Dagster version)
+</ParamField>
+
+#### Example
+
+```bash
+dagster project from-example --example assets_modern_data_stack
+```
+
+### dagster project list-examples
+
+List available official Dagster examples.
+
+```bash
+dagster project list-examples
+```
+
+#### Output
+
+```
+Examples available in `dagster project from-example`:
+* assets_modern_data_stack
+* assets_pandas_type_metadata
+* feature_graph_backed_assets
+* with_pyspark
+```
+
+---
+
+## Troubleshooting
+
+### Command Not Found
+
+If you get a "command not found" error:
+
+1. Verify Dagster is installed:
+   ```bash
+   pip list | grep dagster
+   ```
+
+2. Check your PATH includes the Python scripts directory:
+   ```bash
+   which dagster
+   ```
+
+3. Try running with the Python module syntax:
+   ```bash
+   python -m dagster --help
+   ```
+
+### Configuration Issues
+
+**Check DAGSTER_HOME:**
+```bash
+echo $DAGSTER_HOME
+```
+
+If not set, Dagster will use an ephemeral instance.
+
+**Verify instance configuration:**
+```bash
+dagster instance info
+```
+
+### Workspace Loading Errors
+
+If you encounter workspace loading errors:
+
+1. Verify your workspace.yaml is valid
+2. Check that Python modules are importable:
+   ```bash
+   python -c "import my_module"
+   ```
+3. Ensure your working directory is correct when using relative paths
+
+### Permission Errors
+
+If you get permission errors with the instance:
+
+1. Check DAGSTER_HOME permissions:
+   ```bash
+   ls -la $DAGSTER_HOME
+   ```
+
+2. Ensure the dagster.yaml file is readable:
+   ```bash
+   cat $DAGSTER_HOME/dagster.yaml
+   ```
+
+---
+
+## Environment Variables
+
+<ParamField path="DAGSTER_HOME" type="path">
+  Directory containing the dagster.yaml instance configuration file
+</ParamField>
+
+<ParamField path="DAGSTER_CLI" type="string">
+  Environment variable prefix for CLI options
+</ParamField>
+
+<ParamField path="DAGSTER_GRPC_PORT" type="integer">
+  Default port for gRPC servers
+</ParamField>
+
+<ParamField path="DAGSTER_GRPC_HOST" type="string">
+  Default host for gRPC servers
+</ParamField>
+
+---
+
+## Related
+
+- [dagster-daemon CLI](/api/cli/dagster-daemon) - Daemon process management
+- [Instance Configuration](/deployment/dagster-instance) - Configure your Dagster instance
+- [Workspace Configuration](/concepts/code-locations/workspace-files) - Set up workspace.yaml

@@ -1,0 +1,460 @@
+---
+title: 'API Reference'
+description: 'Complete reference for the Dagster Python API'
+---
+
+## Overview
+
+Dagster provides a comprehensive Python API for building, testing, and deploying data pipelines. This reference documents all public APIs available in the `dagster` package.
+
+## Core Decorators
+
+The most commonly used decorators for defining pipelines:
+
+<CardGroup cols={2}>
+  <Card title="@asset" icon="cube" href="/api/definitions/asset">
+    Define software-defined assets that represent data products
+  </Card>
+  <Card title="@op" icon="circle-nodes" href="/api/definitions/op">
+    Define operations that perform computation
+  </Card>
+  <Card title="@job" icon="diagram-project" href="/api/definitions/job">
+    Define jobs that orchestrate ops or assets
+  </Card>
+  <Card title="@resource" icon="box" href="/api/definitions/resource">
+    Define reusable resources for sharing state and connections
+  </Card>
+</CardGroup>
+
+## Quick Start Example
+
+```python
+from dagster import asset, Definitions
+
+@asset
+def my_data():
+    """Load and transform data."""
+    return [1, 2, 3, 4, 5]
+
+@asset
+def analysis(my_data):
+    """Analyze the data."""
+    return sum(my_data)
+
+defs = Definitions(assets=[my_data, analysis])
+```
+
+## API Categories
+
+### Assets
+
+Define and materialize data assets with full lineage tracking.
+
+**Core APIs:**
+- `@asset` - Define a single asset
+- `@multi_asset` - Define multiple assets from one function
+- `AssetSpec` - Specify asset metadata without materialization logic
+- `AssetKey` - Unique identifier for assets
+- `AssetDep` - Express dependencies between assets
+- `AssetIn` / `AssetOut` - Configure asset inputs and outputs
+- `AssetSelection` - Select groups of assets
+- `SourceAsset` - Reference external assets
+- `@observable_source_asset` - Monitor external assets
+
+**Asset Checks:**
+- `@asset_check` - Define data quality checks
+- `AssetCheckResult` - Return check results
+- `AssetCheckSpec` - Specify check configuration
+- `build_last_update_freshness_checks` - Monitor data freshness
+- `build_column_schema_change_checks` - Detect schema changes
+- `build_metadata_bounds_checks` - Validate metadata bounds
+
+**Materialization:**
+- `materialize()` - Execute assets eagerly
+- `materialize_to_memory()` - Execute and return results in memory
+- `MaterializeResult` - Return from asset functions
+
+### Ops, Jobs & Graphs
+
+Build computational graphs with ops and compose them into jobs.
+
+**Core APIs:**
+- `@op` - Define computational units
+- `@job` - Define executable jobs
+- `@graph` - Compose ops into reusable graphs
+- `@graph_asset` / `@graph_multi_asset` - Turn graphs into assets
+- `OpDefinition` / `JobDefinition` / `GraphDefinition` - Programmatic definitions
+- `In` / `Out` / `DynamicOut` - Configure op inputs and outputs
+- `GraphIn` / `GraphOut` - Configure graph boundaries
+- `Output` / `DynamicOutput` - Return values from ops
+
+**Execution:**
+- `execute_job()` - Execute jobs programmatically
+- `JobExecutionResult` / `ExecuteInProcessResult` - Inspect results
+- `DependencyDefinition` - Define op dependencies
+- `NodeInvocation` - Invoke ops with custom configuration
+
+### Resources & IO Managers
+
+Share state, connections, and handle data persistence.
+
+**Resources:**
+- `@resource` - Define legacy resources
+- `ConfigurableResource` - Define Pythonic resources with type safety
+- `ResourceParam` - Annotate resource parameters
+- `ResourceDefinition` - Programmatic resource definition
+- `build_resources()` - Test resources in isolation
+
+**IO Managers:**
+- `IOManager` - Handle asset and op output persistence
+- `@io_manager` - Define IO managers
+- `ConfigurableIOManager` - Pythonic IO manager base class
+- `UPathIOManager` - Universal path IO manager for cloud storage
+- `FilesystemIOManager` - Local filesystem IO manager
+- `InMemoryIOManager` - Memory-based IO manager for testing
+- `InputManager` - Load inputs independently
+
+**Built-in Managers:**
+- `fs_io_manager` - Filesystem persistence
+- `mem_io_manager` - In-memory persistence
+- `custom_path_fs_io_manager` - Custom path filesystem persistence
+
+### Configuration
+
+Type-safe configuration for resources, ops, and assets.
+
+**Pythonic Config:**
+- `Config` - Base class for op/asset config
+- `ConfigurableResource` - Base class for resource config
+- `ResourceDependency` - Declare resource dependencies
+
+**Config Schema:**
+- `Field` - Define configuration fields
+- `Shape` - Define nested configuration
+- `Selector` - Choose one config option
+- `Permissive` / `PermissiveConfig` - Allow arbitrary keys
+- `Map` - Define key-value mappings
+- `EnvVar` - Load from environment variables
+
+**Config Types:**
+- `String`, `Int`, `Float`, `Bool` - Primitive types
+- `Array` - List types
+- `Enum` / `EnumValue` - Enumerated values
+- `Noneable` - Optional values
+- `ScalarUnion` - Union of scalar types
+- `Any` / `Nothing` - Special types
+
+**Config Sources:**
+- `StringSource` / `IntSource` / `BoolSource` - Load from environment
+- `config_from_files()` - Load from YAML/JSON files
+- `config_from_yaml_strings()` - Parse YAML strings
+
+### Partitions & Backfills
+
+Handle time-series and dimensional data partitioning.
+
+**Partitions:**
+- `DailyPartitionsDefinition` - Daily time windows
+- `HourlyPartitionsDefinition` - Hourly time windows
+- `WeeklyPartitionsDefinition` - Weekly time windows
+- `MonthlyPartitionsDefinition` - Monthly time windows
+- `StaticPartitionsDefinition` - Fixed set of partitions
+- `DynamicPartitionsDefinition` - Runtime-defined partitions
+- `MultiPartitionsDefinition` - Multiple partition dimensions
+- `TimeWindow` - Time range for partition
+- `Partition` - Individual partition
+
+**Partition Mapping:**
+- `IdentityPartitionMapping` - 1:1 partition mapping
+- `TimeWindowPartitionMapping` - Map time windows
+- `AllPartitionMapping` - Depend on all upstream partitions
+- `LastPartitionMapping` - Depend on most recent partition
+- `MultiPartitionMapping` / `DimensionPartitionMapping` - Multi-dimensional mappings
+
+**Partition Config:**
+- `@partitioned_config` - Generate partition-specific config
+- `@daily_partitioned_config` / `@hourly_partitioned_config` - Time-based configs
+- `@static_partitioned_config` / `@dynamic_partitioned_config` - Other configs
+
+**Backfills:**
+- `BackfillPolicy` - Control backfill behavior
+- `AddDynamicPartitionsRequest` / `DeleteDynamicPartitionsRequest` - Manage dynamic partitions
+
+### Schedules & Sensors
+
+Automate pipeline execution based on time or events.
+
+**Schedules:**
+- `@schedule` - Define time-based schedules
+- `ScheduleDefinition` - Programmatic schedule definition
+- `ScheduleEvaluationContext` - Access schedule context
+- `build_schedule_from_partitioned_job()` - Auto-generate from partitions
+- `DefaultScheduleStatus` - Control default enabled state
+
+**Sensors:**
+- `@sensor` - Define event-driven sensors
+- `@asset_sensor` - Trigger on asset materializations
+- `@multi_asset_sensor` - Trigger on multiple assets
+- `@run_status_sensor` / `@run_failure_sensor` - React to run status
+- `SensorDefinition` / `AssetSensorDefinition` - Programmatic definitions
+- `SensorEvaluationContext` - Access sensor context
+- `SensorResult` / `RunRequest` / `SkipReason` - Sensor return types
+
+**Automation:**
+- `AutomationCondition` - Declarative automation rules
+- `AutoMaterializePolicy` - Auto-materialize assets
+- `AutoMaterializeRule` - Custom automation rules
+- `FreshnessPolicy` - Keep data fresh
+- `build_sensor_for_freshness_checks()` - Monitor freshness
+
+### Execution Context
+
+Access runtime information within ops and assets.
+
+**Contexts:**
+- `OpExecutionContext` - Op execution context
+- `AssetExecutionContext` - Asset execution context
+- `AssetCheckExecutionContext` - Asset check execution context
+- `InputContext` / `OutputContext` - IO manager contexts
+- `InitResourceContext` - Resource initialization context
+- `HookContext` - Hook execution context
+
+**Testing Contexts:**
+- `build_op_context()` - Create test op context
+- `build_asset_context()` - Create test asset context
+- `build_asset_check_context()` - Create test check context
+- `build_input_context()` / `build_output_context()` - Create IO contexts
+- `build_init_resource_context()` - Create resource context
+
+### Metadata & Events
+
+Attach rich metadata to executions and emit events.
+
+**Metadata Values:**
+- `MetadataValue` - Base metadata type
+- `TextMetadataValue` / `MarkdownMetadataValue` - Text content
+- `IntMetadataValue` / `FloatMetadataValue` - Numeric values
+- `UrlMetadataValue` / `PathMetadataValue` - Links and paths
+- `JsonMetadataValue` - JSON data
+- `TableMetadataValue` / `TableSchemaMetadataValue` - Tabular data
+- `DagsterAssetMetadataValue` / `DagsterRunMetadataValue` - Cross-references
+
+**Table Metadata:**
+- `TableSchema` / `TableColumn` - Define table structure
+- `TableColumnLineage` / `TableColumnDep` - Column-level lineage
+- `TableRecord` - Individual table rows
+
+**Events:**
+- `AssetMaterialization` - Record asset creation
+- `AssetObservation` - Record asset observations
+- `ExpectationResult` - Data quality expectations
+- `Output` - Op output events
+- `Failure` - Explicit failure
+- `RetryRequested` - Request retry with backoff
+
+**Code References:**
+- `with_source_code_references()` - Attach code locations
+- `LocalFileCodeReference` / `UrlCodeReference` - Reference types
+- `link_code_references_to_git()` - Link to Git
+
+### Types & Type System
+
+Define and validate data types.
+
+**Type System:**
+- `DagsterType` - Define custom types
+- `@usable_as_dagster_type` - Make Python types usable
+- `PythonObjectDagsterType` - Wrap Python types
+- `List`, `Dict`, `Set`, `Tuple`, `Optional` - Collection types
+- `TypeCheck` - Type checking results
+- `DagsterTypeLoader` - Load types from config
+
+**Type Utilities:**
+- `check_dagster_type()` - Validate types
+- `make_python_type_usable_as_dagster_type()` - Register types
+
+### Executors
+
+Control how ops execute.
+
+**Built-in Executors:**
+- `in_process_executor` - Single process execution
+- `multiprocess_executor` - Multi-process execution
+- `multi_or_in_process_executor` - Configurable executor
+
+**Custom Executors:**
+- `@executor` - Define custom executors
+- `ExecutorDefinition` - Programmatic executor definition
+- `Executor` - Base executor class
+- `InitExecutorContext` - Executor initialization context
+
+### Hooks
+
+React to op success or failure.
+
+**Hook APIs:**
+- `@success_hook` - Run on op success
+- `@failure_hook` - Run on op failure
+- `HookDefinition` - Programmatic hook definition
+- `HookContext` - Access hook context
+- `HookExecutionResult` - Return from hooks
+
+### Loggers
+
+Configure structured logging.
+
+**Built-in Loggers:**
+- `colored_console_logger` - Color-coded console output
+- `json_console_logger` - JSON-formatted logs
+- `default_loggers` - Standard logger set
+
+**Custom Loggers:**
+- `@logger` - Define custom loggers
+- `LoggerDefinition` - Programmatic logger definition
+- `InitLoggerContext` - Logger initialization context
+- `get_dagster_logger()` - Get logger instance
+
+### Storage & Persistence
+
+Manage pipeline state and data storage.
+
+**Instance:**
+- `DagsterInstance` - Core Dagster instance
+- `instance_for_test()` - Test instance
+
+**Runs:**
+- `DagsterRun` - Run metadata
+- `DagsterRunStatus` - Run status enum
+- `RunRecord` / `RunsFilter` - Query runs
+- `EventLogRecord` / `EventLogEntry` - Event records
+
+**Storage:**
+- `FileHandle` / `LocalFileHandle` - File references
+- `local_file_manager` - File manager resource
+- `AssetValueLoader` - Load asset values
+- `UPathDefsStateStorage` - Store component state
+
+### Pipes
+
+Execute external code with Dagster integration.
+
+**Core APIs:**
+- `PipesSubprocessClient` - Execute subprocesses
+- `PipesClient` - Base client class
+- `PipesSession` - Pipes execution session
+- `PipesExecutionResult` - Execution results
+
+**Context & Messages:**
+- `PipesContextInjector` - Inject Dagster context
+- `PipesMessageReader` - Read messages from external process
+- `PipesEnvContextInjector` - Pass context via environment
+- `PipesFileContextInjector` / `PipesTempFileContextInjector` - Pass via files
+- `PipesBlobStoreMessageReader` - Read from cloud storage
+- `open_pipes_session()` - Context manager for sessions
+
+### Testing
+
+Test pipelines in isolation.
+
+**Testing Utilities:**
+- `build_op_context()` - Mock op context
+- `build_asset_context()` - Mock asset context
+- `build_sensor_context()` - Mock sensor context
+- `build_schedule_context()` - Mock schedule context
+- `instance_for_test()` - Test Dagster instance
+- `materialize_to_memory()` - Execute in memory
+
+**Validation:**
+- `validate_run_config()` - Validate job configuration
+
+### Components
+
+Build reusable component libraries.
+
+**Component Types:**
+- `Component` - Base component class
+- `StateBackedComponent` - Stateful components
+- `FunctionComponent` - Function-based components
+- `PythonScriptComponent` / `UvRunComponent` - Script execution
+- `SqlComponent` / `TemplatedSqlComponent` - SQL execution
+- `DefsFolderComponent` - Load from folders
+
+**Component System:**
+- `load_defs()` - Load component definitions
+- `build_component_defs()` - Build from components
+- `ComponentTree` - Component hierarchy
+- `scaffold_component()` - Generate component scaffolding
+
+**Resolution:**
+- `Resolvable` - Resolvable values
+- `ResolutionContext` - Resolution context
+- `ResolvedAssetSpec` - Resolved asset specifications
+
+### Definitions
+
+Package and organize pipeline code.
+
+**Core:**
+- `Definitions` - Bundle all definitions
+- `@repository` - Define repositories (legacy)
+- `RepositoryDefinition` - Programmatic repositories
+
+**Loading:**
+- `load_assets_from_current_module()` - Auto-load assets
+- `load_assets_from_modules()` / `load_assets_from_package_name()` - Load from packages
+- `load_asset_checks_from_modules()` - Load checks
+- `load_definitions_from_module()` - Load all definitions
+
+### Errors
+
+Handle and raise Dagster-specific errors.
+
+**Common Errors:**
+- `DagsterError` - Base error class
+- `DagsterInvalidDefinitionError` - Invalid definition
+- `DagsterInvariantViolationError` - Invariant violation
+- `DagsterExecutionInterruptedError` - Interrupted execution
+- `DagsterTypeCheckError` - Type check failure
+- `DagsterConfigMappingFunctionError` - Config error
+
+### Utilities
+
+Helper functions and utilities.
+
+**Utilities:**
+- `configured()` - Create configured variants
+- `file_relative_path()` - Resolve relative paths
+- `with_resources()` - Bind resources to assets
+- `reconstructable()` - Make jobs reconstructable
+- `make_values_resource()` - Create simple resources
+- `make_email_on_run_failure_sensor()` - Email alerts
+
+**Serialization:**
+- `serialize_value()` / `deserialize_value()` - Serialize objects
+
+**Warnings:**
+- `BetaWarning` - Beta feature warning
+- `PreviewWarning` - Preview feature warning
+
+## Migration Guides
+
+- **From Airflow**: See [Airflow Integration Guide](/integrations/airflow)
+- **Asset-based APIs**: Modern asset-based APIs are preferred over legacy op/job patterns
+- **Pythonic Config**: Use `ConfigurableResource` instead of `@resource` decorator
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first pipeline in 5 minutes
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/assets">
+    Learn fundamental Dagster concepts
+  </Card>
+  <Card title="Examples" icon="code" href="https://github.com/dagster-io/dagster/tree/master/examples">
+    Browse example projects
+  </Card>
+  <Card title="Community" icon="users" href="https://dagster.io/slack">
+    Get help on Slack
+  </Card>
+</CardGroup>

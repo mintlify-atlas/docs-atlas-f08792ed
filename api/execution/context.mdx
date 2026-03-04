@@ -1,0 +1,495 @@
+---
+title: "AssetExecutionContext"
+description: "Context object available to assets during execution, providing access to system information, logging, and partitioning."
+---
+
+## AssetExecutionContext
+
+The context object that is available as the first argument to asset compute functions. This context provides system information such as resources, configuration, logging, and partition information.
+
+### Class Definition
+
+```python
+class AssetExecutionContext:
+    def __init__(self, op_execution_context: OpExecutionContext) -> None
+```
+
+Defined in: `dagster._core.execution.context.asset_execution_context`
+
+### Getting the Context
+
+```python
+@staticmethod
+def get() -> AssetExecutionContext
+```
+
+Retrieve the current `AssetExecutionContext` from the execution scope.
+
+**Returns:** The current `AssetExecutionContext`
+
+**Raises:** `DagsterInvariantViolationError` if no context is in scope
+
+```python
+from dagster import asset, AssetExecutionContext
+
+@asset
+def my_asset():
+    # Inside the asset, you can get the context
+    context = AssetExecutionContext.get()
+    context.log.info("Retrieved context")
+```
+
+### Core Properties
+
+<ParamField path="log" type="DagsterLogManager">
+  The log manager for this execution. Logs are viewable in the Dagster UI.
+
+  ```python
+  @asset
+  def logger_asset(context: AssetExecutionContext):
+      context.log.info("Info level message")
+      context.log.warning("Warning message")
+      context.log.error("Error message")
+  ```
+</ParamField>
+
+<ParamField path="run" type="DagsterRun">
+  The `DagsterRun` object for the current execution. Access run metadata including `run_id`, `run_config`, and `tags`.
+
+  ```python
+  @asset
+  def my_asset(context: AssetExecutionContext):
+      run_id = context.run.run_id
+      tags = context.run.tags
+      config = context.run.run_config
+  ```
+</ParamField>
+
+<ParamField path="instance" type="DagsterInstance">
+  The current Dagster instance.
+
+  ```python
+  @asset
+  def my_asset(context: AssetExecutionContext):
+      # Access instance-level configuration
+      storage = context.instance.storage_directory()
+  ```
+</ParamField>
+
+<ParamField path="resources" type="Any">
+  The resources available in the execution context.
+
+  ```python
+  @asset
+  def my_asset(context: AssetExecutionContext):
+      # Access configured resources
+      db = context.resources.database
+      api_client = context.resources.api
+  ```
+</ParamField>
+
+<ParamField path="pdb" type="ForkedPdb">
+  Provides access to pdb debugging from within the asset.
+
+  ```python
+  @asset
+  def debug_asset(context: AssetExecutionContext):
+      context.pdb.set_trace()  # Enter debugger
+  ```
+</ParamField>
+
+### Job and Op Information
+
+<ParamField path="job_def" type="JobDefinition">
+  The definition for the currently executing job.
+</ParamField>
+
+<ParamField path="job_name" type="str">
+  The name of the currently executing job.
+</ParamField>
+
+<ParamField path="op_def" type="OpDefinition">
+  The current op definition.
+</ParamField>
+
+<ParamField path="op_execution_context" type="OpExecutionContext">
+  Access to the underlying `OpExecutionContext` for advanced use cases.
+</ParamField>
+
+<ParamField path="retry_number" type="int">
+  Which retry attempt is currently executing (0 for initial attempt, 1 for first retry, etc.).
+</ParamField>
+
+<ParamField path="repository_def" type="RepositoryDefinition">
+  The Dagster repository for the currently executing job.
+</ParamField>
+
+### Asset Information
+
+<ParamField path="asset_key" type="AssetKey">
+  The `AssetKey` for the current asset. For multi-assets with multiple outputs, use `asset_key_for_output()` instead.
+
+  ```python
+  @asset
+  def my_asset(context: AssetExecutionContext):
+      key = context.asset_key  # AssetKey(["my_asset"])
+  ```
+</ParamField>
+
+<ParamField path="has_assets_def" type="bool">
+  Whether there is a backing `AssetsDefinition` for what is currently executing.
+</ParamField>
+
+<ParamField path="assets_def" type="AssetsDefinition">
+  The backing `AssetsDefinition` for what is currently executing.
+
+  **Raises:** `DagsterInvalidPropertyError` if not available
+</ParamField>
+
+<ParamField path="selected_asset_keys" type="AbstractSet[AssetKey]">
+  The set of `AssetKey`s this execution is expected to materialize.
+</ParamField>
+
+<ParamField path="selected_asset_check_keys" type="AbstractSet[AssetCheckKey]">
+  The asset check keys corresponding to the current selection of assets.
+</ParamField>
+
+### Methods
+
+#### asset_key_for_output
+
+```python
+def asset_key_for_output(self, output_name: str = "result") -> AssetKey
+```
+
+Return the `AssetKey` for the corresponding output.
+
+<ParamField path="output_name" type="str" default="result">
+  The name of the output. For `@asset`, this is automatically "result". For `@multi_asset`, specify the output name from `AssetOut`.
+</ParamField>
+
+**Returns:** `AssetKey`
+
+```python
+from dagster import AssetOut, multi_asset
+
+@multi_asset(
+    outs={
+        "asset1": AssetOut(key=["my_assets", "asset1"]),
+        "asset2": AssetOut(key=["my_assets", "asset2"]),
+    }
+)
+def my_multi_asset(context):
+    key1 = context.asset_key_for_output("asset1")
+    key2 = context.asset_key_for_output("asset2")
+    return {"asset1": data1, "asset2": data2}
+```
+
+#### output_for_asset_key
+
+```python
+def output_for_asset_key(self, asset_key: AssetKey) -> str
+```
+
+Return the output name for the corresponding asset key.
+
+<ParamField path="asset_key" type="AssetKey">
+  The asset key to look up.
+</ParamField>
+
+**Returns:** `str` - The output name
+
+#### asset_key_for_input
+
+```python
+def asset_key_for_input(self, input_name: str) -> AssetKey
+```
+
+Return the `AssetKey` for the corresponding input.
+
+<ParamField path="input_name" type="str">
+  The name of the input.
+</ParamField>
+
+**Returns:** `AssetKey`
+
+### Partition Information
+
+<ParamField path="has_partition_key" type="bool">
+  Whether the current run targets a single partition.
+</ParamField>
+
+<ParamField path="partition_key" type="str">
+  The partition key for the current run.
+
+  **Raises:** Error if not a partitioned run or operating over a range of partitions.
+
+  ```python
+  from dagster import asset, DailyPartitionsDefinition
+
+  partitions_def = DailyPartitionsDefinition("2023-08-20")
+
+  @asset(partitions_def=partitions_def)
+  def my_asset(context: AssetExecutionContext):
+      context.log.info(context.partition_key)
+      # Materializing 2023-08-21 partition logs: "2023-08-21"
+  ```
+</ParamField>
+
+<ParamField path="partition_keys" type="Sequence[str]">
+  List of partition keys for the current run. Useful for backfills of multiple partitions.
+
+  ```python
+  @asset(partitions_def=DailyPartitionsDefinition("2023-08-20"))
+  def my_asset(context: AssetExecutionContext):
+      context.log.info(context.partition_keys)
+      # Backfill of 2023-08-21 through 2023-08-25 logs:
+      # ["2023-08-21", "2023-08-22", "2023-08-23", "2023-08-24", "2023-08-25"]
+  ```
+</ParamField>
+
+<ParamField path="has_partition_key_range" type="bool">
+  Whether the current run targets a range of partitions.
+</ParamField>
+
+<ParamField path="partition_key_range" type="PartitionKeyRange">
+  The range of partition keys for the current run. Returns a range with the same start and end for single partition runs.
+
+  ```python
+  @asset(partitions_def=DailyPartitionsDefinition("2023-08-20"))
+  def my_asset(context: AssetExecutionContext):
+      key_range = context.partition_key_range
+      # Backfill logs: PartitionKeyRange(start="2023-08-21", end="2023-08-25")
+  ```
+</ParamField>
+
+<ParamField path="partition_time_window" type="TimeWindow">
+  The partition time window for the current run.
+
+  **Raises:** Error if not partitioned or not using `TimeWindowPartitionsDefinition`.
+
+  ```python
+  @asset(partitions_def=DailyPartitionsDefinition("2023-08-20"))
+  def my_asset(context: AssetExecutionContext):
+      window = context.partition_time_window
+      # Materializing 2023-08-21 logs: TimeWindow("2023-08-21", "2023-08-22")
+  ```
+</ParamField>
+
+#### Partition Methods for Inputs
+
+```python
+def asset_partition_key_for_input(self, input_name: str) -> str
+def asset_partition_keys_for_input(self, input_name: str) -> Sequence[str]
+def asset_partition_key_range_for_input(self, input_name: str) -> PartitionKeyRange
+def asset_partitions_time_window_for_input(self, input_name: str) -> TimeWindow
+def asset_partitions_def_for_input(self, input_name: str) -> PartitionsDefinition
+```
+
+These methods provide partition information for input assets.
+
+```python
+from dagster import asset, AssetIn, DailyPartitionsDefinition, TimeWindowPartitionMapping
+
+partitions_def = DailyPartitionsDefinition("2023-08-20")
+
+@asset(partitions_def=partitions_def)
+def upstream_asset():
+    ...
+
+@asset(
+    partitions_def=partitions_def,
+    ins={
+        "upstream_asset": AssetIn(
+            partition_mapping=TimeWindowPartitionMapping(start_offset=-1, end_offset=-1)
+        )
+    }
+)
+def downstream_asset(context: AssetExecutionContext, upstream_asset):
+    # Get partition key of the upstream asset
+    upstream_key = context.asset_partition_key_for_input("upstream_asset")
+    # Materializing 2023-08-21 partition, upstream_key = "2023-08-20"
+```
+
+### Metadata Management
+
+#### add_output_metadata
+
+```python
+def add_output_metadata(
+    self,
+    metadata: Mapping[str, Any],
+    output_name: str | None = None,
+    mapping_key: str | None = None,
+) -> None
+```
+
+Add metadata to an output. Can be invoked multiple times; last value for duplicate keys wins.
+
+<ParamField path="metadata" type="Mapping[str, Any]" required>
+  The metadata to attach to the output.
+</ParamField>
+
+<ParamField path="output_name" type="str | None">
+  The name of the output. Not needed for single-output ops.
+</ParamField>
+
+<ParamField path="mapping_key" type="str | None">
+  The mapping key for dynamic outputs.
+</ParamField>
+
+```python
+from dagster import asset, Out
+
+@asset
+def my_asset(context):
+    context.add_output_metadata({
+        "row_count": 100,
+        "preview": "data preview"
+    })
+    return data
+
+@asset(out={"a": Out(), "b": Out()})
+def multi_output_asset(context):
+    context.add_output_metadata({"foo": "bar"}, output_name="a")
+    context.add_output_metadata({"baz": "bat"}, output_name="b")
+    return ("data_a", "data_b")
+```
+
+#### add_asset_metadata
+
+```python
+def add_asset_metadata(
+    self,
+    metadata: Mapping[str, Any],
+    asset_key: CoercibleToAssetKey | None = None,
+    partition_key: str | None = None,
+) -> None
+```
+
+Add metadata to an asset materialization event. Visible in the Dagster UI.
+
+<ParamField path="metadata" type="Mapping[str, Any]" required>
+  The metadata to add to the asset materialization.
+</ParamField>
+
+<ParamField path="asset_key" type="CoercibleToAssetKey | None">
+  The asset key. Not needed if only one asset is being materialized.
+</ParamField>
+
+<ParamField path="partition_key" type="str | None">
+  The partition key for partitioned assets. If not provided on a partitioned asset, metadata is added to all partitions being materialized.
+</ParamField>
+
+```python
+import dagster as dg
+
+@dg.asset
+def my_asset(context):
+    context.add_asset_metadata({"row_count": 1000})
+    return data
+
+@dg.asset(partitions_def=dg.StaticPartitionsDefinition(["a", "b"]))
+def partitioned_asset(context):
+    # Add to all partitions
+    context.add_asset_metadata({"source": "api"})
+    
+    # Add to specific partition
+    for partition_key in context.partition_keys:
+        if partition_key == "a":
+            context.add_asset_metadata(
+                {"special": "value"}, 
+                partition_key=partition_key
+            )
+
+@dg.multi_asset(specs=[dg.AssetSpec("asset1"), dg.AssetSpec("asset2")])
+def my_multi_asset(context):
+    context.add_asset_metadata({"key": "value"}, asset_key="asset1")
+    # Must specify asset_key in multi-assets
+```
+
+#### get_output_metadata
+
+```python
+def get_output_metadata(
+    self,
+    output_name: str,
+    mapping_key: str | None = None,
+) -> Mapping[str, Any] | None
+```
+
+Retrieve metadata that has been set for a specific output.
+
+### Event Logging
+
+#### log_event
+
+```python
+def log_event(self, event: UserEvent) -> None
+```
+
+Log an `AssetMaterialization`, `AssetObservation`, or `ExpectationResult`. Events appear in the event log and DagsterEvents list.
+
+<ParamField path="event" type="AssetMaterialization | AssetObservation | ExpectationResult" required>
+  The event to log.
+</ParamField>
+
+```python
+from dagster import asset, AssetMaterialization
+
+@asset
+def my_asset(context):
+    context.log_event(AssetMaterialization(
+        asset_key="external_asset",
+        description="Materialized external asset"
+    ))
+    return data
+```
+
+### Data Lineage
+
+#### get_asset_provenance
+
+```python
+def get_asset_provenance(self, asset_key: AssetKey) -> DataProvenance | None
+```
+
+Return provenance information for the most recent materialization of an asset.
+
+<ParamField path="asset_key" type="AssetKey" required>
+  The asset key to retrieve provenance for.
+</ParamField>
+
+**Returns:** `DataProvenance | None` - Provenance information, or `None` if never materialized or record is too old.
+
+```python
+@asset
+def downstream_asset(context: AssetExecutionContext, upstream_asset):
+    provenance = context.get_asset_provenance(AssetKey(["upstream_asset"]))
+    if provenance:
+        context.log.info(f"Data version: {provenance.data_version}")
+```
+
+### Debugging
+
+#### describe_op
+
+```python
+def describe_op(self) -> str
+```
+
+Return a string description of the currently executing op.
+
+#### get_mapping_key
+
+```python
+def get_mapping_key(self) -> str | None
+```
+
+Return the mapping key if downstream of a `DynamicOutput`, otherwise `None`.
+
+### Related APIs
+
+- [materialize](/api/execution/materialize) - Execute assets with this context
+- [OpExecutionContext](/api/execution/op-context) - Context for ops
+- [Output](/api/execution/output) - Define op outputs

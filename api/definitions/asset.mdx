@@ -1,0 +1,272 @@
+---
+title: "@asset"
+description: "API reference for the @asset decorator used to define software-defined assets in Dagster."
+---
+
+The `@asset` decorator is used to define a software-defined asset - a combination of an asset key, a compute function, and upstream dependencies.
+
+## Signature
+
+```python
+@asset(
+    name: Optional[str] = None,
+    key_prefix: Optional[Union[str, Sequence[str]]] = None,
+    ins: Optional[Mapping[str, AssetIn]] = None,
+    deps: Optional[Iterable[CoercibleToAssetDep]] = None,
+    metadata: Optional[Mapping[str, Any]] = None,
+    tags: Optional[Mapping[str, str]] = None,
+    description: Optional[str] = None,
+    config_schema: Optional[UserConfigSchema] = None,
+    required_resource_keys: Optional[AbstractSet[str]] = None,
+    resource_defs: Optional[Mapping[str, object]] = None,
+    hooks: Optional[AbstractSet[HookDefinition]] = None,
+    io_manager_def: Optional[object] = None,
+    io_manager_key: Optional[str] = None,
+    dagster_type: Optional[DagsterType] = None,
+    partitions_def: Optional[PartitionsDefinition] = None,
+    op_tags: Optional[Mapping[str, Any]] = None,
+    group_name: Optional[str] = None,
+    output_required: bool = True,
+    automation_condition: Optional[AutomationCondition] = None,
+    backfill_policy: Optional[BackfillPolicy] = None,
+    retry_policy: Optional[RetryPolicy] = None,
+    code_version: Optional[str] = None,
+    key: Optional[CoercibleToAssetKey] = None,
+    check_specs: Optional[Sequence[AssetCheckSpec]] = None,
+    owners: Optional[Sequence[str]] = None,
+    kinds: Optional[AbstractSet[str]] = None,
+    pool: Optional[str] = None,
+) -> AssetsDefinition
+```
+
+## Parameters
+
+<ParamField path="name" type="Optional[str]">
+  The name of the asset. If not provided, defaults to the name of the decorated function. Must be a valid Dagster name (only contains letters, numbers, and underscore).
+</ParamField>
+
+<ParamField path="key_prefix" type="Optional[Union[str, Sequence[str]]]">
+  If provided, the asset's key is the concatenation of the key_prefix and the asset's name. Each item must be a valid Dagster name.
+</ParamField>
+
+<ParamField path="ins" type="Optional[Mapping[str, AssetIn]]">
+  A dictionary that maps input names to information about the input.
+</ParamField>
+
+<ParamField path="deps" type="Optional[Iterable[CoercibleToAssetDep]]">
+  The assets that are upstream dependencies, but do not correspond to a parameter of the decorated function. Can include `AssetDep`, `AssetsDefinition`, `SourceAsset`, `AssetKey`, or `str`.
+</ParamField>
+
+<ParamField path="metadata" type="Optional[Dict[str, Any]]">
+  A dict of metadata entries for the asset.
+</ParamField>
+
+<ParamField path="tags" type="Optional[Mapping[str, str]]">
+  Tags for filtering and organizing. These tags are not attached to runs of the asset.
+</ParamField>
+
+<ParamField path="description" type="Optional[str]">
+  A human-readable description of the asset.
+</ParamField>
+
+<ParamField path="config_schema" type="Optional[ConfigSchema]">
+  The configuration schema for the asset's underlying op. If set, Dagster will check that config provided matches this schema.
+</ParamField>
+
+<ParamField path="required_resource_keys" type="Optional[Set[str]]">
+  Set of resource handles required by the op.
+</ParamField>
+
+<ParamField path="resource_defs" type="Optional[Mapping[str, object]]" beta>
+  A mapping of resource keys to resources. These resources will be initialized during execution and can be accessed from the context.
+</ParamField>
+
+<ParamField path="hooks" type="Optional[AbstractSet[HookDefinition]]">
+  A set of hooks to attach to the asset. These hooks will be executed when the asset is materialized.
+</ParamField>
+
+<ParamField path="io_manager_def" type="Optional[object]" beta>
+  The IOManager used for storing the output of the op as an asset. Only one of `io_manager_def` and `io_manager_key` can be provided.
+</ParamField>
+
+<ParamField path="io_manager_key" type="Optional[str]">
+  The resource key of the IOManager used for storing the output. Defaults to "io_manager".
+</ParamField>
+
+<ParamField path="dagster_type" type="Optional[DagsterType]">
+  Allows specifying type validation functions that will be executed on the output after it runs.
+</ParamField>
+
+<ParamField path="partitions_def" type="Optional[PartitionsDefinition]">
+  Defines the set of partition keys that compose the asset.
+</ParamField>
+
+<ParamField path="op_tags" type="Optional[Dict[str, Any]]">
+  A dictionary of tags for the op that computes the asset. Values that are not strings will be JSON encoded.
+</ParamField>
+
+<ParamField path="group_name" type="Optional[str]">
+  A string name used to organize multiple assets into groups. If not provided, defaults to "default".
+</ParamField>
+
+<ParamField path="output_required" type="bool" default="True">
+  Whether the decorated function will always materialize an asset. If False, the function can conditionally not yield a result.
+</ParamField>
+
+<ParamField path="automation_condition" type="Optional[AutomationCondition]">
+  A condition describing when Dagster should materialize this asset.
+</ParamField>
+
+<ParamField path="backfill_policy" type="Optional[BackfillPolicy]" beta>
+  Configure Dagster to backfill this asset according to its BackfillPolicy.
+</ParamField>
+
+<ParamField path="retry_policy" type="Optional[RetryPolicy]">
+  The retry policy for the op that computes the asset.
+</ParamField>
+
+<ParamField path="code_version" type="Optional[str]">
+  Version of the code that generates this asset. Should be set only for code that deterministically produces the same output when given the same inputs.
+</ParamField>
+
+<ParamField path="key" type="Optional[CoercibleToAssetKey]">
+  The key for this asset. If provided, cannot specify key_prefix or name.
+</ParamField>
+
+<ParamField path="check_specs" type="Optional[Sequence[AssetCheckSpec]]">
+  Specs for asset checks that execute in the decorated function after materializing the asset.
+</ParamField>
+
+<ParamField path="owners" type="Optional[Sequence[str]]">
+  A list of strings representing owners of the asset. Each string can be a user's email address, or a team name prefixed with `team:`, e.g. `team:finops`.
+</ParamField>
+
+<ParamField path="kinds" type="Optional[Set[str]]">
+  A list of strings representing the kinds of the asset. These will be made visible in the Dagster UI.
+</ParamField>
+
+<ParamField path="pool" type="Optional[str]">
+  A string that identifies the concurrency pool that governs this asset's execution.
+</ParamField>
+
+## Returns
+
+**Type:** `AssetsDefinition`
+
+An assets definition object representing the software-defined asset.
+
+## Examples
+
+### Basic Asset
+
+```python
+from dagster import asset
+
+@asset
+def my_asset():
+    return [1, 2, 3]
+```
+
+### Asset with Dependencies
+
+```python
+import pandas as pd
+from dagster import asset
+
+@asset
+def upstream_asset():
+    return pd.DataFrame({"column": [1, 2, 3]})
+
+@asset
+def downstream_asset(upstream_asset: pd.DataFrame) -> pd.DataFrame:
+    # upstream_asset is automatically loaded and passed as an argument
+    return upstream_asset * 2
+```
+
+### Asset with Non-Argument Dependencies
+
+```python
+from dagster import asset
+
+@asset
+def source_data():
+    return {"data": [1, 2, 3]}
+
+@asset(deps=[source_data])  # depends on source_data but doesn't load it
+def processed_data():
+    # Load the data yourself if needed
+    return {"processed": True}
+```
+
+### Asset with Configuration
+
+```python
+from dagster import asset, Config
+from pydantic import Field
+
+class MyAssetConfig(Config):
+    api_key: str = Field(description="API key for external service")
+    num_records: int = Field(default=100)
+
+@asset
+def configurable_asset(config: MyAssetConfig):
+    # Access config.api_key and config.num_records
+    return f"Fetched {config.num_records} records"
+```
+
+### Conditional Asset Materialization
+
+```python
+from dagster import asset, Output
+
+should_materialize = True
+
+@asset(output_required=False)
+def conditional_asset():
+    if should_materialize:
+        yield Output(5)  # must use yield, not return
+    # Otherwise, nothing is materialized
+
+@asset
+def downstream_asset(conditional_asset):
+    # Only runs if conditional_asset materialized
+    return conditional_asset + 1
+```
+
+### Asset with Metadata and Tags
+
+```python
+from dagster import asset, MetadataValue
+
+@asset(
+    metadata={
+        "owner": "data-team@company.com",
+        "priority": "high",
+    },
+    tags={"domain": "finance", "pii": "true"},
+    group_name="finance_assets",
+    owners=["team:data-platform"],
+)
+def important_asset():
+    return calculate_metrics()
+```
+
+### Partitioned Asset
+
+```python
+from dagster import asset, DailyPartitionsDefinition
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2024-01-01")
+)
+def daily_sales(context):
+    partition_date = context.partition_key
+    return load_sales_for_date(partition_date)
+```
+
+## Related
+
+- [multi_asset](/api/definitions/multi-asset) - Define multiple assets computed by the same function
+- [AssetIn](/api/definitions/asset-in) - Specify information about an asset input
+- [AssetOut](/api/definitions/asset-out) - Specify information about an asset output
+- [PartitionsDefinition](/api/definitions/partitions) - Define partitions for assets

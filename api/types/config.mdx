@@ -1,0 +1,363 @@
+---
+title: Config Types
+description: Configuration schema types and utilities for runtime configuration in Dagster.
+---
+
+# Config Types
+
+Dagster provides a comprehensive configuration system for defining runtime configuration for ops, assets, resources, and other pipeline components. This page documents the core configuration types and utilities.
+
+## ConfigMapping
+
+Defines a config mapping for a graph or job, allowing you to override configuration for child ops.
+
+```python
+from dagster import ConfigMapping, graph, op
+
+@op(config_schema={"threshold": int})
+def process_data(context):
+    threshold = context.op_config["threshold"]
+    # ...
+
+@graph
+def my_graph():
+    process_data()
+
+my_graph_configured = my_graph.to_job(
+    config=ConfigMapping(
+        config_fn=lambda cfg: {"process_data": {"config": {"threshold": cfg["max_value"]}}},
+        config_schema={"max_value": int}
+    )
+)
+```
+
+### Constructor
+
+<ParamField path="config_fn" type="Callable[[dict], dict]" required>
+  The function that maps the graph config to a config appropriate for child nodes.
+</ParamField>
+
+<ParamField path="config_schema" type="ConfigSchema">
+  The schema of the graph config. Can be a dictionary, a Dagster config type, or None.
+</ParamField>
+
+<ParamField path="receive_processed_config_values" type="bool">
+  If true, config values provided to config_fn will be converted to their Dagster types before being passed in. For example, enum config will be actual enums if true, or strings if false. Defaults to true.
+</ParamField>
+
+### Methods
+
+<ResponseField name="resolve_from_unvalidated_config" type="method">
+  Validates config against the outer config schema and calls the mapping function against the validated config.
+  
+  **Parameters:**
+  - `config` (Any): The unvalidated config to process
+  
+  **Returns:** The mapped config for child nodes
+  
+  **Raises:** `DagsterInvalidConfigError` if validation fails
+</ResponseField>
+
+<ResponseField name="resolve_from_validated_config" type="method">
+  Calls the mapping function on already-validated config.
+  
+  **Parameters:**
+  - `config` (Any): The validated config to process
+  
+  **Returns:** The mapped config for child nodes
+</ResponseField>
+
+## RunConfig
+
+Container for all configuration that can be passed to a run. Accepts Pythonic definitions for op and asset config and resources.
+
+```python
+from dagster import RunConfig, Config, asset, materialize
+
+class MyAssetConfig(Config):
+    a_str: str
+    threshold: int = 100
+
+@asset
+def my_asset(config: MyAssetConfig):
+    assert config.a_str == "foo"
+    assert config.threshold == 100
+
+materialize(
+    [my_asset],
+    run_config=RunConfig(
+        ops={"my_asset": MyAssetConfig(a_str="foo")}
+    )
+)
+```
+
+### Constructor
+
+<ParamField path="ops" type="dict[str, Any]">
+  Configuration for ops or assets. Keys are op/asset names, values can be Config objects or dictionaries.
+</ParamField>
+
+<ParamField path="resources" type="dict[str, Any]">
+  Configuration for resources. Keys are resource keys, values can be Config objects or dictionaries.
+</ParamField>
+
+<ParamField path="loggers" type="dict[str, Any]">
+  Configuration for loggers. Keys are logger names, values are configuration dictionaries.
+</ParamField>
+
+<ParamField path="execution" type="dict[str, Any]">
+  Configuration for the executor. Typically specifies how steps are executed within a run.
+</ParamField>
+
+### Methods
+
+<ResponseField name="to_config_dict" type="method">
+  Converts the RunConfig to a dictionary representation compatible with Dagster's configuration system.
+  
+  **Returns:** `Dict[str, Any]` - The dictionary representation of the RunConfig
+  
+  ```python
+  run_config = RunConfig(
+      ops={"my_op": MyConfig(value=42)},
+      resources={"my_resource": {"config": {"url": "http://example.com"}}}
+  )
+  config_dict = run_config.to_config_dict()
+  # Returns: {
+  #   "ops": {"my_op": {"config": {"value": 42}}},
+  #   "resources": {"my_resource": {"config": {"url": "http://example.com"}}},
+  #   "loggers": {},
+  #   "execution": {}
+  # }
+  ```
+</ResponseField>
+
+## Config Schema Types
+
+Dagster supports various configuration schema types for defining structured configuration.
+
+### Built-in Scalar Types
+
+The following scalar types are available for configuration:
+
+<ResponseField name="Int" type="ConfigType">
+  Integer configuration type. Validates that the value is an integer.
+  
+  ```python
+  from dagster import op
+  
+  @op(config_schema={"count": int})
+  def my_op(context):
+      count = context.op_config["count"]
+  ```
+</ResponseField>
+
+<ResponseField name="String" type="ConfigType">
+  String configuration type. Validates that the value is a string.
+  
+  ```python
+  @op(config_schema={"name": str})
+  def my_op(context):
+      name = context.op_config["name"]
+  ```
+</ResponseField>
+
+<ResponseField name="Bool" type="ConfigType">
+  Boolean configuration type. Validates that the value is a boolean.
+  
+  ```python
+  @op(config_schema={"enabled": bool})
+  def my_op(context):
+      enabled = context.op_config["enabled"]
+  ```
+</ResponseField>
+
+<ResponseField name="Float" type="ConfigType">
+  Float configuration type. Validates that the value is a float or integer.
+  
+  ```python
+  @op(config_schema={"threshold": float})
+  def my_op(context):
+      threshold = context.op_config["threshold"]
+  ```
+</ResponseField>
+
+### Structured Config Types
+
+<ResponseField name="Field" type="class">
+  Defines a configuration field with a type, default value, and metadata.
+  
+  ```python
+  from dagster import Field, op
+  
+  @op(config_schema={
+      "required_field": Field(str, description="A required string field"),
+      "optional_field": Field(int, default_value=10, is_required=False)
+  })
+  def my_op(context):
+      pass
+  ```
+  
+  **Parameters:**
+  - `config_type`: The type of the field (int, str, bool, float, or a ConfigType)
+  - `default_value`: The default value if not provided
+  - `is_required`: Whether the field must be provided (default: True)
+  - `description`: A description of the field
+</ResponseField>
+
+<ResponseField name="Shape" type="class">
+  Defines a configuration object with named fields. Used for structured configuration.
+  
+  ```python
+  from dagster import Shape, Field
+  
+  database_config = Shape({
+      "host": Field(str),
+      "port": Field(int, default_value=5432),
+      "database": Field(str)
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="Permissive" type="class">
+  Like Shape, but allows additional fields beyond those explicitly defined.
+  
+  ```python
+  from dagster import Permissive
+  
+  config_schema = Permissive({
+      "known_field": str
+      # Additional fields are allowed
+  })
+  ```
+</ResponseField>
+
+<ResponseField name="Selector" type="class">
+  Defines a configuration where exactly one of the provided options must be selected.
+  
+  ```python
+  from dagster import Selector, Field
+  
+  storage_config = Selector({
+      "local": Field(Shape({"path": str})),
+      "s3": Field(Shape({"bucket": str, "key": str})),
+      "gcs": Field(Shape({"bucket": str, "path": str}))
+  })
+  ```
+</ResponseField>
+
+## Pythonic Config
+
+Dagster provides a Pythonic way to define configuration using the `Config` base class:
+
+```python
+from dagster import Config, op, asset, resource
+from typing import Optional
+
+class DatabaseConfig(Config):
+    host: str
+    port: int = 5432
+    username: str
+    password: str
+    database: str
+    ssl_enabled: bool = True
+
+@op
+def query_database(config: DatabaseConfig):
+    # Config fields are accessed as attributes
+    connection_string = f"{config.host}:{config.port}/{config.database}"
+    # ...
+
+@asset
+def my_table(config: DatabaseConfig):
+    # Config is fully typed and validated
+    return query_data(config.host, config.port, config.database)
+
+@resource
+class DatabaseResource(Config):
+    connection_config: DatabaseConfig
+    
+    def query(self, sql: str):
+        # Use connection_config to execute query
+        pass
+```
+
+### Features
+
+- **Type Safety**: Full type checking with mypy/pyright
+- **Validation**: Automatic validation using pydantic
+- **Defaults**: Support for default values
+- **Nested Config**: Compose configuration objects
+- **Optional Fields**: Support for Optional types
+
+## Configuration Examples
+
+### Op Configuration
+
+```python
+from dagster import op, Config
+
+class ProcessingConfig(Config):
+    batch_size: int
+    max_retries: int = 3
+    timeout_seconds: float = 30.0
+
+@op
+def process_data(config: ProcessingConfig):
+    for batch in get_batches(config.batch_size):
+        with timeout(config.timeout_seconds):
+            process_batch(batch, max_retries=config.max_retries)
+```
+
+### Resource Configuration
+
+```python
+from dagster import resource, ConfigurableResource
+
+class APIClientResource(ConfigurableResource):
+    api_key: str
+    base_url: str = "https://api.example.com"
+    timeout: int = 30
+    
+    def get(self, endpoint: str):
+        return requests.get(
+            f"{self.base_url}/{endpoint}",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=self.timeout
+        )
+```
+
+### Job Configuration
+
+```python
+from dagster import job, op, RunConfig
+
+@op(config_schema={"name": str})
+def greet(context):
+    print(f"Hello, {context.op_config['name']}!")
+
+@job
+def greeting_job():
+    greet()
+
+# Execute with configuration
+result = greeting_job.execute_in_process(
+    run_config=RunConfig(ops={"greet": {"name": "World"}})
+)
+```
+
+## Type Aliases
+
+<ResponseField name="ConfigMappingFn" type="TypeAlias">
+  Type alias for config mapping functions: `Callable[[Any], Any]`
+</ResponseField>
+
+<ResponseField name="CoercibleToRunConfig" type="TypeAlias">
+  Type alias for values that can be converted to RunConfig: `dict[str, Any] | RunConfig`
+</ResponseField>
+
+## See Also
+
+- [Ops](/concepts/ops-jobs/ops) - Learn about op configuration
+- [Assets](/concepts/assets/software-defined-assets) - Learn about asset configuration  
+- [Resources](/concepts/resources) - Learn about resource configuration
+- [Metadata Types](/api/types/metadata) - Learn about metadata types

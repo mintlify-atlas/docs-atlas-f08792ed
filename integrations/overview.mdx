@@ -1,0 +1,273 @@
+---
+title: Integrations Overview
+description: Explore Dagster's extensive ecosystem of integrations for data warehouses, cloud platforms, transformation tools, and orchestration systems.
+---
+
+# Integrations Overview
+
+Dagster provides a comprehensive set of integrations that connect your data pipelines to the modern data stack. These integrations enable you to build end-to-end data workflows that span multiple tools and platforms.
+
+## Available Integrations
+
+Dagster offers 60+ integration libraries that extend the core framework with specialized functionality for working with external systems.
+
+### Data Transformation
+
+<CardGroup cols={2}>
+  <Card title="dbt" icon="transform" href="/integrations/dbt">
+    Build software-defined assets from dbt models with full lineage tracking
+  </Card>
+  <Card title="Sling" icon="arrow-right-arrow-left" href="/integrations/sling">
+    Extract and load data between databases and storage systems
+  </Card>
+</CardGroup>
+
+### Data Warehouses
+
+<CardGroup cols={3}>
+  <Card title="Snowflake" icon="snowflake" href="/integrations/snowflake">
+    Execute queries and manage data in Snowflake
+  </Card>
+  <Card title="BigQuery" icon="google" href="/integrations/bigquery">
+    Run BigQuery jobs and query datasets
+  </Card>
+  <Card title="Redshift" icon="aws" href="/integrations/aws#redshift">
+    Connect to Amazon Redshift for data warehousing
+  </Card>
+  <Card title="Databricks" icon="sparkles" href="/integrations/databricks">
+    Execute Databricks jobs and use Databricks SQL
+  </Card>
+  <Card title="DuckDB" icon="database" href="/integrations/duckdb">
+    Embedded analytical database for fast queries
+  </Card>
+  <Card title="Postgres" icon="database" href="/integrations/postgres">
+    Connect to PostgreSQL databases
+  </Card>
+</CardGroup>
+
+### Cloud Platforms
+
+<CardGroup cols={3}>
+  <Card title="AWS" icon="aws" href="/integrations/aws">
+    S3, EMR, ECS, Athena, Lambda, and more AWS services
+  </Card>
+  <Card title="GCP" icon="google" href="/integrations/gcp">
+    BigQuery, GCS, Dataproc, and other Google Cloud services
+  </Card>
+  <Card title="Azure" icon="microsoft" href="/integrations/azure">
+    Azure Blob Storage, Data Lake, and Azure services
+  </Card>
+</CardGroup>
+
+### Orchestration & Migration
+
+<CardGroup cols={2}>
+  <Card title="Airflow" icon="wind" href="/integrations/airflow">
+    Migrate from Airflow or run Airflow DAGs in Dagster
+  </Card>
+  <Card title="Airlift" icon="plane-up" href="/integrations/airlift">
+    Incrementally migrate Airflow DAGs to Dagster
+  </Card>
+</CardGroup>
+
+### Data Quality & Observability
+
+<CardGroup cols={3}>
+  <Card title="Great Expectations" icon="check-circle" href="/integrations/great-expectations">
+    Data quality testing and validation
+  </Card>
+  <Card title="Pandera" icon="shield-check" href="/integrations/pandera">
+    DataFrame validation for Pandas and PySpark
+  </Card>
+  <Card title="Datadog" icon="dog" href="/integrations/datadog">
+    Send metrics and events to Datadog
+  </Card>
+</CardGroup>
+
+### Business Intelligence
+
+<CardGroup cols={3}>
+  <Card title="Tableau" icon="chart-line" href="/integrations/tableau">
+    Refresh Tableau workbooks and datasources
+  </Card>
+  <Card title="Looker" icon="eye" href="/integrations/looker">
+    Trigger Looker PDTs and manage dashboards
+  </Card>
+  <Card title="PowerBI" icon="chart-bar" href="/integrations/powerbi">
+    Refresh PowerBI datasets and reports
+  </Card>
+  <Card title="Sigma" icon="sigma" href="/integrations/sigma">
+    Integrate with Sigma Computing for analytics
+  </Card>
+</CardGroup>
+
+### Data Integration
+
+<CardGroup cols={3}>
+  <Card title="Fivetran" icon="arrows-rotate" href="/integrations/fivetran">
+    Trigger and monitor Fivetran sync jobs
+  </Card>
+  <Card title="Airbyte" icon="arrows-rotate" href="/integrations/airbyte">
+    Run Airbyte connection syncs
+  </Card>
+  <Card title="Census" icon="users" href="/integrations/census">
+    Trigger Census reverse ETL syncs
+  </Card>
+  <Card title="Hightouch" icon="arrow-up" href="/integrations/hightouch">
+    Execute Hightouch syncs for reverse ETL
+  </Card>
+</CardGroup>
+
+### Machine Learning
+
+<CardGroup cols={3}>
+  <Card title="MLflow" icon="flask" href="/integrations/mlflow">
+    Track ML experiments and deploy models
+  </Card>
+  <Card title="Weights & Biases" icon="weight" href="/integrations/wandb">
+    Log experiments and artifacts to W&B
+  </Card>
+  <Card title="OpenAI" icon="robot" href="/integrations/openai">
+    Build LLM-powered data pipelines
+  </Card>
+</CardGroup>
+
+### Data Processing
+
+<CardGroup cols={3}>
+  <Card title="Spark" icon="fire" href="/integrations/spark">
+    Execute Spark jobs for distributed processing
+  </Card>
+  <Card title="PySpark" icon="fire" href="/integrations/pyspark">
+    Write Spark jobs in Python
+  </Card>
+  <Card title="Pandas" icon="table" href="/integrations/pandas">
+    DataFrame validation and type checking
+  </Card>
+  <Card title="Polars" icon="table" href="/integrations/polars">
+    Fast DataFrame operations with Polars
+  </Card>
+  <Card title="DuckDB" icon="database" href="/integrations/duckdb">
+    In-process analytical queries
+  </Card>
+  <Card title="Delta Lake" icon="delta" href="/integrations/deltalake">
+    Work with Delta Lake tables
+  </Card>
+</CardGroup>
+
+### Compute & Execution
+
+<CardGroup cols={3}>
+  <Card title="Kubernetes" icon="dharmachakra" href="/integrations/kubernetes">
+    Run Dagster on Kubernetes
+  </Card>
+  <Card title="Docker" icon="docker" href="/integrations/docker">
+    Execute ops in Docker containers
+  </Card>
+  <Card title="Celery" icon="c" href="/integrations/celery">
+    Distributed task execution with Celery
+  </Card>
+  <Card title="Dask" icon="cubes" href="/integrations/dask">
+    Parallel computing with Dask
+  </Card>
+</CardGroup>
+
+### Notifications
+
+<CardGroup cols={3}>
+  <Card title="Slack" icon="slack" href="/integrations/slack">
+    Send notifications to Slack channels
+  </Card>
+  <Card title="PagerDuty" icon="bell" href="/integrations/pagerduty">
+    Create incidents and alerts in PagerDuty
+  </Card>
+  <Card title="Microsoft Teams" icon="microsoft" href="/integrations/msteams">
+    Post messages to Teams channels
+  </Card>
+  <Card title="Twilio" icon="phone" href="/integrations/twilio">
+    Send SMS notifications via Twilio
+  </Card>
+</CardGroup>
+
+### Infrastructure
+
+<CardGroup cols={2}>
+  <Card title="SSH" icon="terminal" href="/integrations/ssh">
+    Execute commands on remote servers via SSH
+  </Card>
+  <Card title="GitHub" icon="github" href="/integrations/github">
+    Interact with GitHub API and repositories
+  </Card>
+</CardGroup>
+
+## Installation
+
+Each integration is distributed as a separate Python package. Install integrations using pip or uv:
+
+```bash
+# Install a single integration
+pip install dagster-dbt
+
+# Install multiple integrations
+pip install dagster-dbt dagster-snowflake dagster-aws
+```
+
+<Note>
+Most integration libraries require `dagster` to be installed first. Some integrations have additional dependencies that will be automatically installed.
+</Note>
+
+## Using Integrations
+
+Integrations typically provide one or more of the following:
+
+- **Resources**: Configurable clients for connecting to external systems
+- **Assets**: Pre-built asset definitions for common patterns
+- **Ops**: Reusable operations for specific tasks
+- **IO Managers**: Persistent storage backends
+- **Sensors**: Monitors for external events
+
+Example using multiple integrations:
+
+```python
+from dagster import Definitions
+from dagster_dbt import DbtCliResource, dbt_assets
+from dagster_snowflake import SnowflakeResource
+from dagster_slack import SlackResource
+
+@dbt_assets(manifest="path/to/manifest.json")
+def dbt_models(context, dbt: DbtCliResource):
+    yield from dbt.cli(["build"], context=context).stream()
+
+defs = Definitions(
+    assets=[dbt_models],
+    resources={
+        "dbt": DbtCliResource(project_dir="path/to/dbt"),
+        "snowflake": SnowflakeResource(
+            account="my-account",
+            user="my-user",
+            password={"env": "SNOWFLAKE_PASSWORD"},
+        ),
+        "slack": SlackResource(token={"env": "SLACK_TOKEN"}),
+    },
+)
+```
+
+## Creating Custom Integrations
+
+You can extend Dagster with custom integrations by:
+
+1. Creating a `ConfigurableResource` for your external system
+2. Building asset definitions or ops that use your resource
+3. Packaging as a library for reuse across projects
+
+See the [Resources guide](/concepts/resources) for more details.
+
+## Next Steps
+
+Explore specific integration guides:
+
+- [dbt Integration](/integrations/dbt) - Transform data with dbt
+- [Snowflake Integration](/integrations/snowflake) - Connect to Snowflake
+- [AWS Integration](/integrations/aws) - Use AWS services
+- [Databricks Integration](/integrations/databricks) - Run Databricks jobs
+- [Airflow Migration](/integrations/airflow) - Migrate from Airflow

@@ -1,0 +1,253 @@
+---
+title: Assets
+description: Learn about Dagster's asset-based approach to data pipelines, where you define what data should exist and how to compute it.
+---
+
+# Assets
+
+Assets are the core building blocks of Dagster. An **asset** is a data object that represents a file, table, model, or any persistent artifact produced by your data pipeline. Assets describe what data should exist and how to compute it, rather than prescribing a specific execution order.
+
+## Why Assets Matter
+
+Assets provide a declarative approach to data pipelines:
+
+- **Data-centric thinking**: Focus on the data artifacts you need, not the tasks that produce them
+- **Automatic lineage**: Dagster tracks dependencies between assets automatically
+- **Observability**: See when assets were last updated, their freshness, and materialization history
+- **Selective execution**: Materialize individual assets or subsets based on your needs
+- **Cross-pipeline dependencies**: Assets can depend on outputs from different jobs and pipelines
+
+## Basic Asset Definition
+
+Define an asset using the `@asset` decorator. The function name becomes the asset name:
+
+```python
+import json
+import os
+from dagster import asset
+
+@asset
+def my_asset():
+    os.makedirs("data", exist_ok=True)
+    with open("data/my_asset.json", "w") as f:
+        json.dump([1, 2, 3], f)
+```
+
+In this example:
+- The asset name is `my_asset`
+- When materialized, it writes data to a JSON file
+- Dagster tracks when this asset was last materialized
+
+## Asset Dependencies
+
+Assets can depend on other assets. Dagster infers dependencies from function parameters:
+
+```python
+from dagster import asset
+
+@asset
+def upstream_asset():
+    return [1, 2, 3]
+
+@asset
+def downstream_asset(upstream_asset):
+    # The parameter name matches the upstream asset
+    return upstream_asset + [4]
+```
+
+<Info>
+Dagster automatically determines that `downstream_asset` depends on `upstream_asset` by matching the parameter name to the upstream asset name.
+</Info>
+
+### Non-Argument Dependencies
+
+For dependencies that don't pass data (e.g., checking that a table exists before querying), use the `deps` parameter:
+
+```python
+from dagster import asset, AssetDep
+
+@asset
+def upstream_table():
+    # Creates a database table
+    create_table("my_table")
+
+@asset(deps=["upstream_table"])
+def downstream_query():
+    # Depends on upstream_table but doesn't load its output
+    return query_table("my_table")
+```
+
+## Asset Configuration
+
+The `@asset` decorator accepts many parameters to customize behavior:
+
+<Tabs>
+  <Tab title="Naming & Organization">
+    ```python
+    from dagster import asset
+
+    @asset(
+        name="custom_name",           # Override the function name
+        key_prefix=["analytics"],    # Namespace: analytics/custom_name
+        group_name="data_ingestion", # UI grouping
+    )
+    def my_asset():
+        return compute_data()
+    ```
+  </Tab>
+
+  <Tab title="Metadata & Description">
+    ```python
+    from dagster import asset
+
+    @asset(
+        description="Daily aggregated metrics from user events",
+        metadata={
+            "owner": "data-team@company.com",
+            "source": "events_table",
+            "table": "analytics.daily_metrics",
+        },
+        owners=["team:data-engineering"],
+    )
+    def daily_metrics():
+        return aggregate_events()
+    ```
+  </Tab>
+
+  <Tab title="Partitions & Backfills">
+    ```python
+    from dagster import asset, DailyPartitionsDefinition, AssetExecutionContext
+
+    @asset(
+        partitions_def=DailyPartitionsDefinition(start_date="2024-01-01"),
+    )
+    def partitioned_asset(context: AssetExecutionContext):
+        partition_date = context.partition_key
+        return fetch_data_for_date(partition_date)
+    ```
+  </Tab>
+
+  <Tab title="Automation">
+    ```python
+    from dagster import asset, AutomationCondition
+
+    @asset(
+        automation_condition=AutomationCondition.eager(),
+        code_version="v2",  # Track code changes
+    )
+    def automated_asset():
+        return compute_result()
+    ```
+  </Tab>
+</Tabs>
+
+## Multi-Assets
+
+Sometimes a single computation produces multiple assets. Use `@multi_asset` for this:
+
+```python
+from dagster import multi_asset, AssetOut, Output
+
+@multi_asset(
+    outs={
+        "users": AssetOut(),
+        "orders": AssetOut(),
+    }
+)
+def extract_from_api():
+    data = fetch_api_data()
+    
+    users_df = process_users(data)
+    orders_df = process_orders(data)
+    
+    yield Output(users_df, output_name="users")
+    yield Output(orders_df, output_name="orders")
+```
+
+## Asset Materialization
+
+Materializing an asset means computing its value and persisting it. You can materialize assets:
+
+- **In the UI**: Click the "Materialize" button
+- **Via CLI**: `dagster asset materialize`
+- **Programmatically**: Using schedules, sensors, or automation conditions
+- **In tests**: Call the asset function directly or use `materialize()`
+
+```python
+from dagster import materialize
+
+# Materialize a single asset
+result = materialize([my_asset])
+
+# Materialize assets with dependencies
+result = materialize([upstream_asset, downstream_asset])
+```
+
+## Asset Checks
+
+Asset checks validate the quality of your assets:
+
+```python
+from dagster import asset, asset_check, AssetCheckResult
+
+@asset
+def orders_data():
+    return load_orders()
+
+@asset_check(asset=orders_data)
+def orders_not_empty(orders_data):
+    num_rows = len(orders_data)
+    return AssetCheckResult(
+        passed=num_rows > 0,
+        metadata={"num_rows": num_rows},
+    )
+```
+
+## Source Assets
+
+Source assets represent external data that Dagster doesn't manage:
+
+```python
+from dagster import SourceAsset, asset
+
+# Define a source asset
+raw_users = SourceAsset(key="raw_users")
+
+@asset(deps=[raw_users])
+def clean_users():
+    # Depends on raw_users but doesn't materialize it
+    return load_and_clean("raw_users")
+```
+
+## Best Practices
+
+<Accordion title="Keep assets focused and composable">
+  Each asset should represent a single logical data artifact. Break large computations into multiple assets that can be materialized independently.
+</Accordion>
+
+<Accordion title="Use meaningful names">
+  Asset names should clearly describe the data they represent. Use `key_prefix` to organize assets into namespaces like `["raw", "staging", "analytics"]`.
+</Accordion>
+
+<Accordion title="Add metadata and descriptions">
+  Document your assets with descriptions and metadata. This helps team members understand what each asset contains and how it's used.
+</Accordion>
+
+<Accordion title="Leverage the asset graph">
+  Think about your data as a graph of dependencies. The Dagster UI visualizes this graph, making it easy to understand data lineage.
+</Accordion>
+
+## Related Documentation
+
+- [Ops, Jobs & Graphs](/concepts/ops-jobs-graphs) - Lower-level computation primitives
+- [Partitions & Backfills](/concepts/partitions-backfills) - Time-based and custom partitioning
+- [IO Managers](/concepts/io-managers) - Control how asset data is stored and loaded
+- [Automation](/concepts/automation) - Automatically materialize assets based on conditions
+
+## API Reference
+
+- [`@asset`](https://docs.dagster.io/api/assets#dagster.asset) - Asset decorator
+- [`@multi_asset`](https://docs.dagster.io/api/assets#dagster.multi_asset) - Multi-asset decorator
+- [`AssetIn`](https://docs.dagster.io/api/assets#dagster.AssetIn) - Configure asset inputs
+- [`AssetOut`](https://docs.dagster.io/api/assets#dagster.AssetOut) - Configure asset outputs
+- [`AssetExecutionContext`](https://docs.dagster.io/api/execution#dagster.AssetExecutionContext) - Runtime context for assets

@@ -1,0 +1,440 @@
+---
+title: Resources
+description: Resources provide reusable connections to external services and systems, enabling better testing, configuration management, and code reuse across your Dagster pipelines.
+---
+
+# Resources
+
+**Resources** are objects that provide access to external services and systems like databases, APIs, cloud storage, and compute clusters. Resources help you:
+
+- **Separate business logic from configuration**: Define connections once, use them everywhere
+- **Enable testing**: Swap real implementations with mocks in tests
+- **Manage environments**: Use different configurations for dev, staging, and production
+- **Share code**: Reuse the same resource across multiple assets, ops, and jobs
+
+## Why Resources Matter
+
+Without resources, you might hardcode connections:
+
+```python
+# ❌ Hardcoded - difficult to test and configure
+@asset
+def fetch_users():
+    conn = psycopg2.connect("postgresql://prod-db:5432/users")
+    return conn.execute("SELECT * FROM users")
+```
+
+With resources, you externalize configuration:
+
+```python
+# ✅ Using resources - easy to test and reconfigure
+@asset
+def fetch_users(database: DatabaseResource):
+    return database.execute("SELECT * FROM users")
+```
+
+## Defining Resources
+
+Dagster supports modern Pythonic resources using the `ConfigurableResource` base class:
+
+```python
+import dagster as dg
+
+class MyResource(dg.ConfigurableResource):
+    value: str
+
+    def get_value(self) -> str:
+        return self.value
+```
+
+### Resource Configuration
+
+Resources can have configuration fields with type hints, defaults, and validation:
+
+```python
+import dagster as dg
+from pydantic import Field
+
+class DatabaseResource(dg.ConfigurableResource):
+    host: str
+    port: int = 5432
+    username: str
+    password: str = Field(exclude=True)  # Won't be logged
+    database: str
+    
+    def get_connection(self):
+        return connect(
+            host=self.host,
+            port=self.port,
+            user=self.username,
+            password=self.password,
+            database=self.database,
+        )
+```
+
+## Using Resources in Assets
+
+Inject resources into assets using type-annotated parameters:
+
+```python
+import dagster as dg
+import requests
+from typing import Any
+
+@dg.asset
+def data_from_url(data_url: dg.ResourceParam[str]) -> dict[str, Any]:
+    return requests.get(data_url).json()
+
+@dg.definitions
+def resources():
+    return dg.Definitions(
+        assets=[data_from_url],
+        resources={
+            "data_url": "https://api.example.com/data"
+        },
+    )
+```
+
+### Configurable Resources in Assets
+
+For complex resources, use `ConfigurableResource`:
+
+```python
+import dagster as dg
+
+class APIClient(dg.ConfigurableResource):
+    base_url: str
+    api_key: str
+    timeout: int = 30
+    
+    def fetch(self, endpoint: str):
+        url = f"{self.base_url}/{endpoint}"
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        response = requests.get(url, headers=headers, timeout=self.timeout)
+        return response.json()
+
+@dg.asset
+def user_data(api: APIClient):
+    return api.fetch("users")
+
+defs = dg.Definitions(
+    assets=[user_data],
+    resources={
+        "api": APIClient(
+            base_url="https://api.example.com",
+            api_key=dg.EnvVar("API_KEY"),
+        )
+    },
+)
+```
+
+## Using Resources in Ops
+
+Ops can use resources the same way:
+
+```python
+import dagster as dg
+import requests
+
+@dg.op
+def print_data_from_resource(data_url: dg.ResourceParam[str]):
+    print(requests.get(data_url).json())
+
+@dg.job
+def print_data_from_url_job():
+    print_data_from_resource()
+
+@dg.definitions
+def resources():
+    return dg.Definitions(
+        jobs=[print_data_from_url_job],
+        resources={"data_url": "https://dagster.io"},
+    )
+```
+
+## Environment Variables
+
+Use `EnvVar` to load configuration from environment variables:
+
+```python
+import dagster as dg
+
+class DatabaseResource(dg.ConfigurableResource):
+    host: str
+    password: str
+
+defs = dg.Definitions(
+    assets=[my_asset],
+    resources={
+        "database": DatabaseResource(
+            host=dg.EnvVar("DATABASE_HOST"),
+            password=dg.EnvVar("DATABASE_PASSWORD"),
+        )
+    },
+)
+```
+
+<Info>
+Environment variables are loaded at runtime, not when the code is parsed. This allows you to use different values in different environments without changing code.
+</Info>
+
+## Resource Dependencies
+
+Resources can depend on other resources:
+
+```python
+import dagster as dg
+
+class StringHolderResource(dg.ConfigurableResource):
+    value: str
+
+class MyResourceRequiresAnother(dg.ConfigurableResource):
+    foo: StringHolderResource
+    bar: str
+    
+    def get_combined(self):
+        return f"{self.foo.value}-{self.bar}"
+
+defs = dg.Definitions(
+    assets=[my_asset],
+    resources={
+        "string_holder": StringHolderResource(value="hello"),
+        "combined": MyResourceRequiresAnother(
+            foo=dg.ResourceParam("string_holder"),
+            bar="world",
+        ),
+    },
+)
+```
+
+## Lifecycle Management
+
+Resources can implement setup and teardown logic:
+
+```python
+import dagster as dg
+from contextlib import contextmanager
+
+class DatabaseConnection(dg.ConfigurableResource):
+    host: str
+    
+    @contextmanager
+    def get_connection(self):
+        conn = connect(self.host)
+        try:
+            yield conn
+        finally:
+            conn.close()
+
+@dg.asset
+def query_users(database: DatabaseConnection):
+    with database.get_connection() as conn:
+        return conn.execute("SELECT * FROM users")
+```
+
+For resources that need initialization at the start of a run:
+
+```python
+import dagster as dg
+
+class CacheResource(dg.ConfigurableResource):
+    cache_dir: str
+    
+    def setup_for_execution(self, context):
+        # Called once at the start of execution
+        os.makedirs(self.cache_dir, exist_ok=True)
+        self._cache = {}
+    
+    def get(self, key):
+        return self._cache.get(key)
+    
+    def set(self, key, value):
+        self._cache[key] = value
+```
+
+## Testing with Resources
+
+Resources make testing easy by allowing you to substitute mocks:
+
+```python
+import dagster as dg
+
+class MyResource(dg.ConfigurableResource):
+    value: str
+
+    def get_value(self) -> str:
+        return self.value
+
+def test_my_resource():
+    # Test the resource directly
+    resource = MyResource(value="foo")
+    assert resource.get_value() == "foo"
+
+@dg.asset
+def data_asset(my_resource: MyResource):
+    return my_resource.get_value()
+
+def test_asset_with_resource():
+    # Test asset with a mock resource
+    result = dg.materialize(
+        [data_asset],
+        resources={"my_resource": MyResource(value="test_value")},
+    )
+    assert result.success
+```
+
+### Testing with Nested Resources
+
+```python
+import dagster as dg
+
+class StringHolderResource(dg.ConfigurableResource):
+    value: str
+
+class MyResourceRequiresAnother(dg.ConfigurableResource):
+    foo: StringHolderResource
+    bar: str
+
+def test_my_resource_with_nesting():
+    string_holder = StringHolderResource(value="foo")
+    resource = MyResourceRequiresAnother(foo=string_holder, bar="bar")
+    assert resource.foo.value == "foo"
+    assert resource.bar == "bar"
+```
+
+## Resource Factory Pattern
+
+For resources that require complex initialization, use the factory pattern:
+
+```python
+import dagster as dg
+
+class ExternalService:
+    def __init__(self, api_token):
+        self._api_token = api_token
+        self._cache = {}
+    
+    def fetch_data(self, key):
+        if key in self._cache:
+            return self._cache[key]
+        # Fetch from external API
+        data = fetch_from_api(self._api_token, key)
+        self._cache[key] = data
+        return data
+
+class ConfigurableExternalService(dg.ConfigurableIOManagerFactory):
+    api_token: str
+
+    def create_io_manager(self, context) -> ExternalService:
+        return ExternalService(self.api_token)
+```
+
+## Built-in Resources
+
+Dagster provides several built-in resources:
+
+<Tabs>
+  <Tab title="File System">
+    ```python
+    from dagster import FilesystemIOManager
+
+    defs = dg.Definitions(
+        assets=[my_asset],
+        resources={
+            "io_manager": FilesystemIOManager(
+                base_dir="/data/storage"
+            )
+        },
+    )
+    ```
+  </Tab>
+
+  <Tab title="Environment Config">
+    ```python
+    import dagster as dg
+
+    @dg.asset
+    def configured_asset(
+        context: dg.AssetExecutionContext,
+        env: dg.ResourceParam[dict]
+    ):
+        context.log.info(f"Environment: {env['name']}")
+
+    defs = dg.Definitions(
+        assets=[configured_asset],
+        resources={
+            "env": {"name": "production", "region": "us-west-2"}
+        },
+    )
+    ```
+  </Tab>
+</Tabs>
+
+## Per-Environment Configuration
+
+Use different resource configurations for different environments:
+
+```python
+import dagster as dg
+
+class DatabaseResource(dg.ConfigurableResource):
+    connection_string: str
+
+def get_dev_resources():
+    return {
+        "database": DatabaseResource(
+            connection_string="postgresql://localhost:5432/dev"
+        )
+    }
+
+def get_prod_resources():
+    return {
+        "database": DatabaseResource(
+            connection_string=dg.EnvVar("PROD_DATABASE_URL")
+        )
+    }
+
+# In your Definitions
+IS_PROD = os.getenv("ENV") == "production"
+
+defs = dg.Definitions(
+    assets=[my_asset],
+    resources=get_prod_resources() if IS_PROD else get_dev_resources(),
+)
+```
+
+## Best Practices
+
+<Accordion title="Use ConfigurableResource for all resources">
+  The modern `ConfigurableResource` API provides better type checking, validation, and IDE support compared to the older `@resource` decorator.
+</Accordion>
+
+<Accordion title="Externalize all configuration">
+  Use `EnvVar` for sensitive values like API keys and passwords. Never hardcode credentials in your code.
+</Accordion>
+
+<Accordion title="Keep resources focused">
+  Each resource should represent a single external service or capability. Don't create "god objects" that do everything.
+</Accordion>
+
+<Accordion title="Test resources independently">
+  Write unit tests for your resource classes before using them in assets. This makes debugging much easier.
+</Accordion>
+
+<Accordion title="Document resource configuration">
+  Add docstrings and field descriptions to help users understand how to configure your resources.
+</Accordion>
+
+## Related Documentation
+
+- [IO Managers](/concepts/io-managers) - Special resources for data persistence
+- [Assets](/concepts/assets) - Using resources in assets
+- [Ops, Jobs & Graphs](/concepts/ops-jobs-graphs) - Using resources in ops
+- [Configuration](/concepts/configuration) - Advanced configuration patterns
+
+## API Reference
+
+- [`ConfigurableResource`](https://docs.dagster.io/api/resources#dagster.ConfigurableResource) - Base class for resources
+- [`ResourceParam`](https://docs.dagster.io/api/resources#dagster.ResourceParam) - Type annotation for resource injection
+- [`EnvVar`](https://docs.dagster.io/api/config#dagster.EnvVar) - Load configuration from environment
+- [`Definitions`](https://docs.dagster.io/api/definitions#dagster.Definitions) - Define resources globally

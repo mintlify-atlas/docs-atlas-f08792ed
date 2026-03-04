@@ -1,0 +1,162 @@
+---
+title: Deployment Overview
+description: Learn about Dagster deployment architecture and options for production environments
+---
+
+# Deployment Overview
+
+Dagster provides flexible deployment options for running data pipelines in production. This guide covers the core architecture and available deployment strategies.
+
+## Architecture Components
+
+A production Dagster deployment consists of three essential long-running services:
+
+<Steps>
+  <Step title="Dagster Webserver">
+    The webserver serves the UI and responds to GraphQL queries. It can run with multiple replicas for high availability.
+    
+    ```bash
+    dagster-webserver -h 0.0.0.0 -p 3000 -w workspace.yaml
+    ```
+  </Step>
+
+  <Step title="Dagster Daemon">
+    The daemon manages schedules, sensors, and run queuing. Only one daemon instance should run per deployment.
+    
+    ```bash
+    dagster-daemon run
+    ```
+  </Step>
+
+  <Step title="Code Location Servers">
+    Code location servers expose your Dagster definitions via gRPC. Each code location runs as a separate service.
+    
+    ```bash
+    dagster api grpc -h 0.0.0.0 -p 4000 -f definitions.py
+    ```
+  </Step>
+</Steps>
+
+## Persistent Storage
+
+Dagster requires persistent storage for run history, schedules, and event logs. Production deployments should use PostgreSQL:
+
+```yaml title="dagster.yaml"
+run_storage:
+  module: dagster_postgres.run_storage
+  class: PostgresRunStorage
+  config:
+    postgres_db:
+      hostname: postgres_host
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+schedule_storage:
+  module: dagster_postgres.schedule_storage
+  class: PostgresScheduleStorage
+  config:
+    postgres_db:
+      hostname: postgres_host
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+
+event_log_storage:
+  module: dagster_postgres.event_log
+  class: PostgresEventLogStorage
+  config:
+    postgres_db:
+      hostname: postgres_host
+      username:
+        env: DAGSTER_POSTGRES_USER
+      password:
+        env: DAGSTER_POSTGRES_PASSWORD
+      db_name:
+        env: DAGSTER_POSTGRES_DB
+      port: 5432
+```
+
+## Deployment Options
+
+Dagster supports multiple deployment strategies:
+
+### Docker
+
+Run Dagster components as Docker containers with Docker Compose or container orchestration platforms. Ideal for local development and smaller deployments.
+
+[Learn more about Docker deployment →](/deployment/docker)
+
+### Kubernetes
+
+Deploy to Kubernetes using the official Helm chart. Recommended for production workloads requiring scalability and high availability.
+
+[Learn more about Kubernetes deployment →](/deployment/kubernetes)
+
+### Cloud Platforms
+
+Dagster can be deployed to AWS ECS, Google Cloud Run, Azure Container Instances, or other cloud platforms.
+
+## Job Execution Flow
+
+When a job is launched, it flows through several components:
+
+<Steps>
+  <Step title="Run Coordinator">
+    Receives the run request from the webserver and queues it for execution.
+    
+    ```yaml title="dagster.yaml"
+    run_coordinator:
+      module: dagster.core.run_coordinator
+      class: QueuedRunCoordinator
+      config:
+        max_concurrent_runs: 5
+    ```
+  </Step>
+
+  <Step title="Run Launcher">
+    The daemon picks up queued runs and launches them using the configured run launcher (Docker, Kubernetes, etc.).
+    
+    ```yaml title="dagster.yaml"
+    run_launcher:
+      module: dagster_docker
+      class: DockerRunLauncher
+      config:
+        network: dagster_network
+    ```
+  </Step>
+
+  <Step title="Run Worker">
+    The launched container/pod executes the job, traversing the graph and executing each operation.
+  </Step>
+</Steps>
+
+## Configuration Levels
+
+Dagster configuration is organized into three levels:
+
+| Level | File | Description |
+|-------|------|-------------|
+| **Instance** | `dagster.yaml` | Deployment-wide configuration for storage, run launcher, and daemon settings |
+| **Workspace** | `workspace.yaml` | Code location server addresses and connection details |
+| **Job Run** | Run config | Job-specific configuration for resources, ops, and assets |
+
+<Info>
+  The instance and workspace configuration files should be mounted into all Dagster services (webserver, daemon, and code location servers).
+</Info>
+
+## Next Steps
+
+Choose a deployment option to get started:
+
+- [Docker deployment with Docker Compose](/deployment/docker)
+- [Kubernetes deployment with Helm](/deployment/kubernetes)
+- [Understanding deployment architecture](/deployment/architecture)

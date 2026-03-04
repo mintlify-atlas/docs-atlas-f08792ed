@@ -1,0 +1,250 @@
+---
+title: "@graph"
+description: "API reference for the @graph decorator used to define reusable op graphs in Dagster."
+---
+
+The `@graph` decorator creates a reusable op graph - a composition of ops with defined dependencies. Graphs can be used within other graphs or converted to jobs.
+
+## Signature
+
+```python
+@graph(
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    input_defs: Optional[Sequence[InputDefinition]] = None,
+    output_defs: Optional[Sequence[OutputDefinition]] = None,
+    ins: Optional[Mapping[str, GraphIn]] = None,
+    out: Optional[Union[GraphOut, Mapping[str, GraphOut]]] = None,
+    tags: Optional[Mapping[str, Any]] = None,
+    config: Optional[Union[ConfigMapping, Mapping[str, Any]]] = None,
+) -> GraphDefinition
+```
+
+## Parameters
+
+<ParamField path="name" type="Optional[str]">
+  The name of the op graph. Must be unique within any `RepositoryDefinition` containing the graph. If not provided, defaults to the function name.
+</ParamField>
+
+<ParamField path="description" type="Optional[str]">
+  A human-readable description of the graph.
+</ParamField>
+
+<ParamField path="input_defs" type="Optional[List[InputDefinition]]">
+  Information about the inputs that this graph maps. Information provided here will be combined with what can be inferred from the function signature, with these explicit InputDefinitions taking precedence.
+
+  Uses of inputs in the body of the decorated composition function will determine the `InputMappings` passed to the underlying `GraphDefinition`.
+</ParamField>
+
+<ParamField path="output_defs" type="Optional[List[OutputDefinition]]">
+  Output definitions for the graph. If not provided explicitly, these will be inferred from type hints.
+
+  Uses of these outputs in the body of the decorated composition function, as well as the return value of the decorated function, will be used to infer the appropriate set of `OutputMappings` for the underlying `GraphDefinition`.
+
+  To map multiple outputs, return a dictionary from the composition function.
+</ParamField>
+
+<ParamField path="ins" type="Optional[Dict[str, GraphIn]]">
+  Information about the inputs that this graph maps. Information provided here will be combined with what can be inferred from the function signature, with these explicit GraphIn taking precedence.
+</ParamField>
+
+<ParamField path="out" type="Optional[Union[GraphOut, Dict[str, GraphOut]]]">
+  Information about the outputs that this graph maps. Information provided here will be combined with what can be inferred from the return type signature if the function does not use yield.
+
+  To map multiple outputs, return a dictionary from the composition function.
+</ParamField>
+
+<ParamField path="tags" type="Optional[Dict[str, Any]]">
+  Arbitrary metadata for any execution run of the graph. Values that are not strings will be JSON encoded and must meet the criteria that `json.loads(json.dumps(value)) == value`. These tag values may be overwritten by tag values provided at invocation time.
+</ParamField>
+
+<ParamField path="config" type="Optional[Union[ConfigMapping, Mapping[str, Any]]]">
+  Describes how the graph is configured at runtime.
+
+  - If a `ConfigMapping` object is provided, then the graph takes on the config schema of this object. The mapping will be applied at runtime to generate the config for the graph's constituent nodes.
+  - If a dictionary is provided, then it will be used as the default run config for the graph. This means it must conform to the config schema of the underlying nodes.
+  - If no value is provided, then the config schema for the graph is the default (derived from the underlying nodes).
+</ParamField>
+
+## Returns
+
+**Type:** `GraphDefinition`
+
+A graph definition object.
+
+## Examples
+
+### Basic Graph
+
+```python
+from dagster import graph, op
+
+@op
+def return_one() -> int:
+    return 1
+
+@op
+def add_one(x: int) -> int:
+    return x + 1
+
+@graph
+def my_graph():
+    add_one(return_one())
+```
+
+### Graph with Multiple Ops
+
+```python
+from dagster import graph, op
+
+@op
+def fetch_data() -> dict:
+    return {"data": [1, 2, 3]}
+
+@op
+def transform_data(data: dict) -> list:
+    return [x * 2 for x in data["data"]]
+
+@op
+def save_data(transformed: list):
+    print(f"Saving: {transformed}")
+
+@graph
+def etl_graph():
+    data = fetch_data()
+    transformed = transform_data(data)
+    save_data(transformed)
+```
+
+### Graph with Inputs and Outputs
+
+```python
+from dagster import graph, op, GraphIn, GraphOut
+
+@op
+def multiply(x: int, y: int) -> int:
+    return x * y
+
+@op
+def add(x: int, y: int) -> int:
+    return x + y
+
+@graph(
+    ins={"a": GraphIn(), "b": GraphIn()},
+    out=GraphOut(),
+)
+def math_graph(a, b):
+    product = multiply(a, b)
+    return add(product, a)
+```
+
+### Converting Graph to Job
+
+```python
+from dagster import graph, op, job
+
+@op
+def my_op():
+    return 42
+
+@graph
+def my_graph():
+    my_op()
+
+# Method 1: Using .to_job()
+my_job = my_graph.to_job(name="my_job")
+
+# Method 2: Using @job decorator wrapper
+@job
+def my_job_v2():
+    my_graph()
+```
+
+### Nested Graphs
+
+```python
+from dagster import graph, op
+
+@op
+def op_a() -> int:
+    return 1
+
+@op
+def op_b(x: int) -> int:
+    return x + 1
+
+@graph
+def inner_graph():
+    return op_b(op_a())
+
+@graph
+def outer_graph():
+    result1 = inner_graph()
+    result2 = inner_graph()
+    # Use the inner graph multiple times
+    return op_b(result1)
+```
+
+### Graph with Config Mapping
+
+```python
+from dagster import graph, op, ConfigMapping, Config
+from pydantic import Field
+
+class OpConfig(Config):
+    value: int
+
+@op
+def configurable_op(config: OpConfig) -> int:
+    return config.value
+
+class GraphConfig(Config):
+    multiplier: int = Field(default=1)
+
+@graph(
+    config=ConfigMapping(
+        config_schema=GraphConfig,
+        config_fn=lambda cfg: {
+            "configurable_op": {"config": {"value": cfg["multiplier"]}}
+        },
+    )
+)
+def mapped_graph():
+    configurable_op()
+```
+
+### Graph with Multiple Outputs
+
+```python
+from dagster import graph, op, GraphOut
+
+@op
+def generate_values() -> tuple:
+    return (1, 2, 3)
+
+@op
+def process_first(x: int) -> int:
+    return x * 2
+
+@op
+def process_second(x: int) -> int:
+    return x * 3
+
+@graph(
+    out={"first_result": GraphOut(), "second_result": GraphOut()}
+)
+def multi_output_graph():
+    a, b, c = generate_values()
+    return {
+        "first_result": process_first(a),
+        "second_result": process_second(b),
+    }
+```
+
+## Related
+
+- [@op](/api/definitions/op) - Define operations
+- [@job](/api/definitions/job) - Create executable jobs
+- [GraphIn](/api/definitions/graph-in) - Define graph inputs
+- [GraphOut](/api/definitions/graph-out) - Define graph outputs
+- [ConfigMapping](/api/definitions/config-mapping) - Map configuration

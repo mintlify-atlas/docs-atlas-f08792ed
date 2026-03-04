@@ -1,0 +1,748 @@
+---
+title: Deployment Architecture
+description: Deep dive into Dagster deployment architecture, components, and production configurations
+---
+
+# Deployment Architecture
+
+Understanding Dagster's architecture is essential for designing robust production deployments. This guide covers the core components, their interactions, and configuration strategies.
+
+## System Components
+
+A Dagster deployment consists of several interconnected components:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Dagster Deployment                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐      ┌──────────────┐                   │
+│  │   Webserver  │◄────►│  PostgreSQL  │                   │
+│  │   (GraphQL)  │      │   Storage    │                   │
+│  └──────┬───────┘      └──────▲───────┘                   │
+│         │                     │                            │
+│         │                     │                            │
+│  ┌──────▼───────┐      ┌──────┴───────┐                   │
+│  │    Daemon    │◄────►│  Run Queue   │                   │
+│  │  (Schedules, │      │              │                   │
+│  │   Sensors)   │      │              │                   │
+│  └──────┬───────┘      └──────────────┘                   │
+│         │                                                  │
+│         │  Launches                                        │
+│         ▼                                                  │
+│  ┌──────────────┐                                         │
+│  │  Run Worker  │                                         │
+│  │  (Container/ │                                         │
+│  │     Pod)     │                                         │
+│  └──────┬───────┘                                         │
+│         │                                                  │
+│         │  Loads code via gRPC                            │
+│         ▼                                                  │
+│  ┌──────────────┐                                         │
+│  │  Code Server │                                         │
+│  │    (gRPC)    │                                         │
+│  └──────────────┘                                         │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Long-Running Services
+
+Three services must run continuously in a Dagster deployment:
+
+### 1. Dagster Webserver
+
+**Purpose**: Serves the UI and GraphQL API
+
+**Scaling**: Can run multiple replicas for high availability
+
+**Configuration**:
+```bash
+dagster-webserver \
+  --host 0.0.0.0 \
+  --port 3000 \
+  --workspace workspace.yaml \
+  --path-prefix /dagster
+```
+
+**Health check endpoint**: `GET /server_info`
+
+<Info>
+  The webserver is stateless and can be scaled horizontally. Place a load balancer in front of multiple replicas.
+</Info>
+
+### 2. Dagster Daemon
+
+**Purpose**: Manages schedules, sensors, run queuing, and backfills
+
+**Scaling**: Only one daemon instance per deployment
+
+**Configuration**:
+```bash
+dagster-daemon run
+```
+
+<Warning>
+  Running multiple daemon instances will cause duplicate schedule executions and sensor evaluations. Always run exactly one daemon.
+</Warning>
+
+**Daemon responsibilities**:
+- Evaluating schedules on their cron schedule
+- Evaluating sensors at their polling interval
+- Dequeuing runs from the run coordinator
+- Launching runs via the run launcher
+- Monitoring run health
+- Processing backfills
+
+### 3. Code Location Servers
+
+**Purpose**: Expose Dagster definitions via gRPC
+
+**Scaling**: Each code location runs one replica
+
+**Configuration**:
+```bash
+dagster api grpc \
+  --host 0.0.0.0 \
+  --port 4000 \
+  --module my_dagster_project
+```
+
+**Multiple code locations**:
+```yaml title="workspace.yaml"
+load_from:
+  - grpc_server:
+      host: analytics-code-server
+      port: 4000
+      location_name: "analytics"
+  
+  - grpc_server:
+      host: ml-code-server
+      port: 4000
+      location_name: "machine_learning"
+  
+  - grpc_server:
+      host: etl-code-server
+      port: 4000
+      location_name: "etl_pipelines"
+```
+
+## Instance Configuration
+
+The `dagster.yaml` file configures deployment-wide behavior. All services (webserver, daemon, code servers) must have access to this file.
+
+### Storage Configuration
+
+<Tabs>
+  <Tab title="PostgreSQL (Production)">
+    ```yaml title="dagster.yaml"
+    run_storage:
+      module: dagster_postgres.run_storage
+      class: PostgresRunStorage
+      config:
+        postgres_db:
+          hostname: postgres.example.com
+          username:
+            env: DAGSTER_POSTGRES_USER
+          password:
+            env: DAGSTER_POSTGRES_PASSWORD
+          db_name:
+            env: DAGSTER_POSTGRES_DB
+          port: 5432
+
+    schedule_storage:
+      module: dagster_postgres.schedule_storage
+      class: PostgresScheduleStorage
+      config:
+        postgres_db:
+          hostname: postgres.example.com
+          username:
+            env: DAGSTER_POSTGRES_USER
+          password:
+            env: DAGSTER_POSTGRES_PASSWORD
+          db_name:
+            env: DAGSTER_POSTGRES_DB
+          port: 5432
+
+    event_log_storage:
+      module: dagster_postgres.event_log
+      class: PostgresEventLogStorage
+      config:
+        postgres_db:
+          hostname: postgres.example.com
+          username:
+            env: DAGSTER_POSTGRES_USER
+          password:
+            env: DAGSTER_POSTGRES_PASSWORD
+          db_name:
+            env: DAGSTER_POSTGRES_DB
+          port: 5432
+    ```
+  </Tab>
+  
+  <Tab title="MySQL (Alternative)">
+    ```yaml title="dagster.yaml"
+    run_storage:
+      module: dagster_mysql.run_storage
+      class: MySQLRunStorage
+      config:
+        mysql_db:
+          hostname: mysql.example.com
+          username:
+            env: DAGSTER_MYSQL_USER
+          password:
+            env: DAGSTER_MYSQL_PASSWORD
+          db_name:
+            env: DAGSTER_MYSQL_DB
+          port: 3306
+    
+    schedule_storage:
+      module: dagster_mysql.schedule_storage
+      class: MySQLScheduleStorage
+      config:
+        mysql_db:
+          hostname: mysql.example.com
+          username:
+            env: DAGSTER_MYSQL_USER
+          password:
+            env: DAGSTER_MYSQL_PASSWORD
+          db_name:
+            env: DAGSTER_MYSQL_DB
+          port: 3306
+    
+    event_log_storage:
+      module: dagster_mysql.event_log
+      class: MySQLEventLogStorage
+      config:
+        mysql_db:
+          hostname: mysql.example.com
+          username:
+            env: DAGSTER_MYSQL_USER
+          password:
+            env: DAGSTER_MYSQL_PASSWORD
+          db_name:
+            env: DAGSTER_MYSQL_DB
+          port: 3306
+    ```
+  </Tab>
+</Tabs>
+
+### Run Coordinator Configuration
+
+The run coordinator manages run queuing and concurrency:
+
+```yaml title="dagster.yaml"
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    # Maximum runs executing simultaneously
+    max_concurrent_runs: 10
+    
+    # Tag-based concurrency limits
+    tag_concurrency_limits:
+      # Limit runs with specific tags
+      - key: "database"
+        value: "postgres"
+        limit: 3
+      
+      - key: "priority"
+        value: "high"
+        limit: 5
+      
+      # Apply limit to any value of this key
+      - key: "team"
+        limit: 2
+    
+    # Dequeue runs in order (FIFO)
+    dequeue_use_threads: false
+    
+    # Number of seconds between dequeue attempts
+    dequeue_interval_seconds: 5
+```
+
+<Info>
+  Tag concurrency limits are useful for preventing resource contention. For example, limit concurrent runs accessing the same database to avoid overwhelming it.
+</Info>
+
+### Run Launcher Configuration
+
+The run launcher determines how run workers are created:
+
+<Tabs>
+  <Tab title="Docker">
+    ```yaml title="dagster.yaml"
+    run_launcher:
+      module: dagster_docker
+      class: DockerRunLauncher
+      config:
+        # Docker network for containers
+        network: dagster_network
+        
+        # Environment variables to pass
+        env_vars:
+          - DAGSTER_POSTGRES_USER
+          - DAGSTER_POSTGRES_PASSWORD
+          - DAGSTER_POSTGRES_DB
+          - AWS_ACCESS_KEY_ID
+          - AWS_SECRET_ACCESS_KEY
+        
+        # Container configuration
+        container_kwargs:
+          volumes:
+            - /var/run/docker.sock:/var/run/docker.sock
+            - /tmp/dagster:/tmp/dagster
+          
+          # Resource limits
+          mem_limit: "4g"
+          cpu_quota: 200000  # 2 CPUs
+          cpu_period: 100000
+    ```
+  </Tab>
+  
+  <Tab title="Kubernetes">
+    ```yaml title="dagster.yaml"
+    run_launcher:
+      module: dagster_k8s
+      class: K8sRunLauncher
+      config:
+        # Namespace for run pods
+        job_namespace: dagster-runs
+        
+        # Use in-cluster config
+        load_incluster_config: true
+        
+        # Service account for run pods
+        service_account_name: dagster-run
+        
+        # Image pull policy
+        image_pull_policy: IfNotPresent
+        
+        # Pod configuration
+        env_config_maps:
+          - dagster-pipeline-env
+        
+        env_secrets:
+          - dagster-aws-credentials
+          - dagster-db-credentials
+        
+        # Resource limits
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+          requests:
+            cpu: "1000m"
+            memory: "2Gi"
+        
+        # Pod labels
+        labels:
+          app: dagster
+          component: run-worker
+        
+        # Pod annotations
+        annotations:
+          prometheus.io/scrape: "true"
+    ```
+  </Tab>
+  
+  <Tab title="Celery (K8s)">
+    ```yaml title="dagster.yaml"
+    run_launcher:
+      module: dagster_celery_k8s
+      class: CeleryK8sRunLauncher
+      config:
+        # Celery broker
+        broker: "pyamqp://guest@rabbitmq:5672//"
+        
+        # Celery backend
+        backend: "rpc://"
+        
+        # Kubernetes config
+        job_image:
+          repository: my-registry/dagster-user-code
+          tag: latest
+          pullPolicy: Always
+        
+        image_pull_secrets:
+          - name: docker-registry-secret
+        
+        service_account_name: dagster-run
+        
+        job_namespace: dagster-runs
+        
+        load_incluster_config: true
+    ```
+  </Tab>
+</Tabs>
+
+### Scheduler Configuration
+
+```yaml title="dagster.yaml"
+scheduler:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
+```
+
+<Info>
+  The DagsterDaemonScheduler is the only supported scheduler. Legacy schedulers have been deprecated.
+</Info>
+
+## Compute Log Storage
+
+Compute logs (stdout/stderr from runs) can be stored in cloud storage:
+
+<Tabs>
+  <Tab title="Amazon S3">
+    ```yaml title="dagster.yaml"
+    compute_logs:
+      module: dagster_aws.s3
+      class: S3ComputeLogManager
+      config:
+        bucket: "my-dagster-logs"
+        prefix: "dagster/logs"
+        region: "us-west-2"
+        
+        # Use IAM role instead of credentials
+        use_ssl: true
+        
+        # Local directory for buffering
+        local_dir: "/tmp/dagster/logs"
+        
+        # Upload logs periodically during execution
+        upload_interval: 30
+        
+        # Show URL only (don't download in UI)
+        show_url_only: false
+    ```
+  </Tab>
+  
+  <Tab title="Google Cloud Storage">
+    ```yaml title="dagster.yaml"
+    compute_logs:
+      module: dagster_gcp.gcs
+      class: GCSComputeLogManager
+      config:
+        bucket: "my-dagster-logs"
+        prefix: "dagster/logs/"
+        
+        # Service account JSON key
+        json_credentials_envvar: "GOOGLE_APPLICATION_CREDENTIALS"
+        
+        # Local directory for buffering
+        local_dir: "/tmp/dagster/logs"
+        
+        # Upload interval (seconds)
+        upload_interval: 30
+    ```
+  </Tab>
+  
+  <Tab title="Azure Blob Storage">
+    ```yaml title="dagster.yaml"
+    compute_logs:
+      module: dagster_azure.adls2
+      class: AzureBlobComputeLogManager
+      config:
+        storage_account: "mydagsterlogs"
+        container: "dagster-logs"
+        prefix: "logs/"
+        
+        # Use managed identity or connection string
+        default_azure_credential: true
+        
+        # Local directory for buffering
+        local_dir: "/tmp/dagster/logs"
+        
+        # Upload interval (seconds)
+        upload_interval: 30
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Without a compute log manager, run logs will only be available in the container/pod and will be lost when it terminates.
+</Warning>
+
+## Job Execution Flow
+
+Understanding the execution flow helps troubleshoot issues:
+
+<Steps>
+  <Step title="User initiates run">
+    Via UI, CLI, schedule, or sensor. The request goes to the webserver.
+  </Step>
+
+  <Step title="Run coordinator queues run">
+    The webserver calls the run coordinator, which:
+    - Checks concurrency limits
+    - Assigns run to queue
+    - Returns immediately (non-blocking)
+    
+    ```python
+    # Run coordinator logic (simplified)
+    if current_runs < max_concurrent_runs:
+        if tag_limits_satisfied(run):
+            queue.enqueue(run)
+    ```
+  </Step>
+
+  <Step title="Daemon dequeues run">
+    The daemon polls the queue every few seconds:
+    - Dequeues runs respecting concurrency limits
+    - Calls the run launcher for each dequeued run
+    
+    ```python
+    # Daemon loop (simplified)
+    while True:
+        runs = queue.dequeue_respecting_limits()
+        for run in runs:
+            run_launcher.launch_run(run)
+        sleep(dequeue_interval_seconds)
+    ```
+  </Step>
+
+  <Step title="Run launcher creates worker">
+    The run launcher:
+    - Creates a new Docker container or Kubernetes pod
+    - Injects run ID and configuration
+    - Starts the dagster process
+    
+    ```bash
+    # Example run worker command
+    dagster api execute_run \
+      --run-id abc123 \
+      --instance-ref {...}
+    ```
+  </Step>
+
+  <Step title="Run worker executes job">
+    The worker:
+    - Loads the code location
+    - Traverses the job graph
+    - Executes each op/asset
+    - Writes events to storage
+    - Streams logs to compute log manager
+  </Step>
+
+  <Step title="Run completes">
+    The worker:
+    - Marks run as success or failure
+    - Uploads final logs
+    - Terminates
+  </Step>
+</Steps>
+
+## Production Architecture Patterns
+
+### Pattern 1: Single Cluster
+
+All components in one Kubernetes cluster:
+
+```yaml
+Components:
+  - Webserver (3 replicas)
+  - Daemon (1 replica)
+  - Code Servers (N deployments)
+  - PostgreSQL (RDS/CloudSQL)
+  - Run Workers (ephemeral pods)
+
+Pros:
+  - Simple to manage
+  - Low latency between components
+  - Cost effective
+
+Cons:
+  - Runs compete with services for resources
+  - Single point of failure
+```
+
+### Pattern 2: Separate Run Cluster
+
+Services and runs in different clusters:
+
+```yaml
+Services Cluster:
+  - Webserver (3 replicas)
+  - Daemon (1 replica)
+  - Code Servers (N deployments)
+
+Run Cluster:
+  - Run Workers (ephemeral pods)
+  - Isolated resources
+  - Can scale independently
+
+Shared:
+  - PostgreSQL (RDS/CloudSQL)
+  - S3/GCS for logs and artifacts
+
+Pros:
+  - Run workloads don't affect services
+  - Better resource isolation
+  - Independent scaling
+
+Cons:
+  - More complex networking
+  - Higher cost
+  - Cross-cluster IAM/RBAC
+```
+
+### Pattern 3: Multi-Region
+
+Services in multiple regions:
+
+```yaml
+Region 1 (Primary):
+  - Webserver (3 replicas)
+  - Daemon (1 replica)
+  - Code Servers
+  - PostgreSQL (primary)
+
+Region 2 (DR):
+  - Webserver (3 replicas, standby)
+  - Code Servers
+  - PostgreSQL (replica)
+
+Pros:
+  - High availability
+  - Disaster recovery
+  - Geographic distribution
+
+Cons:
+  - Complex setup
+  - Database replication lag
+  - Highest cost
+```
+
+## Monitoring and Observability
+
+### Health Checks
+
+```yaml
+# Kubernetes probes
+livenessProbe:
+  httpGet:
+    path: /server_info
+    port: 3000
+  periodSeconds: 30
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /server_info
+    port: 3000
+  periodSeconds: 10
+  failureThreshold: 2
+
+startupProbe:
+  httpGet:
+    path: /server_info
+    port: 3000
+  periodSeconds: 10
+  failureThreshold: 30
+```
+
+### Metrics
+
+Dagster exposes metrics via the event log:
+
+```python
+import dagster as dg
+
+@dg.asset
+def monitored_asset(context: dg.AssetExecutionContext):
+    # Log metrics
+    context.log_event(
+        dg.AssetMaterialization(
+            asset_key="monitored_asset",
+            metadata={
+                "rows_processed": dg.MetadataValue.int(1000),
+                "execution_time_seconds": dg.MetadataValue.float(45.2),
+                "data_quality_score": dg.MetadataValue.float(0.95),
+            },
+        )
+    )
+```
+
+### Alerting
+
+Configure sensors to alert on failures:
+
+```python
+import dagster as dg
+
+@dg.run_failure_sensor
+def alert_on_failure(context: dg.RunFailureSensorContext):
+    # Send alert to Slack, PagerDuty, etc.
+    slack_client.post_message(
+        channel="#data-alerts",
+        text=f"Run failed: {context.dagster_run.job_name}",
+    )
+```
+
+## Security Considerations
+
+### Network Security
+
+```yaml
+Kubernetes Network Policies:
+  # Allow webserver to reach code servers
+  - from: webserver
+    to: code-servers
+    port: 4000
+  
+  # Allow daemon to reach code servers
+  - from: daemon
+    to: code-servers
+    port: 4000
+  
+  # Deny all other ingress
+  - deny: all other traffic
+```
+
+### Secrets Management
+
+```python
+import dagster as dg
+from dagster_aws.secretsmanager import aws_secretsmanager_resource
+
+@dg.asset
+def asset_with_secrets(
+    context: dg.AssetExecutionContext,
+    aws_secrets: aws_secretsmanager_resource,
+):
+    # Retrieve secrets at runtime
+    api_key = aws_secrets.get_secret_value(
+        secret_id="my-api-key"
+    )
+```
+
+### RBAC
+
+```yaml
+# Kubernetes service account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dagster-run
+  namespace: dagster
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dagster-run-role
+  namespace: dagster
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "delete"]
+```
+
+## Next Steps
+
+- [Deploy with Docker](/deployment/docker)
+- [Deploy to Kubernetes](/deployment/kubernetes)
+- [Configure run launchers](/deployment/overview#run-launchers)
+- [Set up monitoring](/deployment/architecture#monitoring)

@@ -1,0 +1,651 @@
+---
+title: dagster-daemon CLI
+description: Reference for the dagster-daemon command-line interface
+---
+
+# dagster-daemon CLI
+
+The `dagster-daemon` command-line interface manages the Dagster daemon process, which is responsible for executing schedules, sensors, backfills, and other background tasks.
+
+## Installation
+
+The daemon is included with the main Dagster package:
+
+```bash
+pip install dagster
+```
+
+For the full webserver functionality, install:
+
+```bash
+pip install dagster-webserver
+```
+
+## Overview
+
+The Dagster daemon is a long-running process that must be running for:
+- **Schedules** to trigger runs automatically
+- **Sensors** to evaluate and launch runs
+- **Backfills** to execute partitioned runs
+- **Run queue management** for controlling concurrency
+- **Auto-materializing assets** (asset sensors)
+- **Run retries** and failure handling
+
+<Info>
+  The daemon is automatically started when using `dagster dev`. For production deployments, you'll need to run it separately.
+</Info>
+
+---
+
+## Global Options
+
+<ParamField path="--version" type="flag">
+  Show the installed Dagster version
+</ParamField>
+
+<ParamField path="--help" type="flag">
+  Show help message and exit
+</ParamField>
+
+---
+
+## dagster-daemon run
+
+Start the Dagster daemon process.
+
+### Usage
+
+```bash
+dagster-daemon run [OPTIONS]
+```
+
+### Options
+
+<ParamField path="--code-server-log-level" type="choice" default="warning">
+  Set the log level for code servers spun up by the daemon
+  
+  **Choices**: `critical`, `error`, `warning`, `info`, `debug`
+</ParamField>
+
+<ParamField path="--log-level" type="choice" default="info">
+  Set the log level for the daemon process
+  
+  **Choices**: `critical`, `error`, `warning`, `info`, `debug`
+  
+  **Environment Variable**: `DAGSTER_DAEMON_LOG_LEVEL`
+</ParamField>
+
+<ParamField path="--log-format" type="choice" default="colored">
+  Format of the log output from the daemon
+  
+  **Choices**: `colored`, `json`, `rich`
+</ParamField>
+
+### Workspace Options
+
+<ParamField path="-w, --workspace" type="path">
+  Path to workspace file. Can be specified multiple times
+</ParamField>
+
+<ParamField path="-f, --python-file" type="path">
+  Path to a Python file containing Dagster definitions
+</ParamField>
+
+<ParamField path="-m, --module-name" type="string">
+  Python module containing Dagster definitions
+</ParamField>
+
+<ParamField path="-d, --working-directory" type="path">
+  Working directory to use when loading the repository
+</ParamField>
+
+<ParamField path="-a, --attribute" type="string">
+  Attribute within the module or file that defines the Definitions object
+</ParamField>
+
+### Example
+
+<CodeGroup>
+```bash Basic Usage
+# Start daemon with default settings
+dagster-daemon run
+```
+
+```bash With Workspace File
+# Point to a workspace configuration
+dagster-daemon run -w workspace.yaml
+```
+
+```bash With Python Module
+# Load definitions from a module
+dagster-daemon run -m my_project.definitions
+```
+
+```bash Debug Mode
+# Enable debug logging
+dagster-daemon run --log-level debug
+```
+
+```bash JSON Logging
+# Use JSON format for structured logging
+dagster-daemon run --log-format json --log-level info
+```
+</CodeGroup>
+
+### Output
+
+```
+2024-01-15 10:30:45 -0800 - dagster.daemon - INFO - Starting Dagster daemon
+2024-01-15 10:30:45 -0800 - dagster.daemon.SchedulerDaemon - INFO - Daemon started
+2024-01-15 10:30:45 -0800 - dagster.daemon.SensorDaemon - INFO - Daemon started  
+2024-01-15 10:30:45 -0800 - dagster.daemon.BackfillDaemon - INFO - Daemon started
+2024-01-15 10:30:45 -0800 - dagster.daemon.AssetDaemon - INFO - Daemon started
+```
+
+### Daemon Types
+
+The daemon automatically runs multiple sub-daemons:
+
+1. **SchedulerDaemon** - Evaluates schedules and launches runs
+2. **SensorDaemon** - Evaluates sensors and launches runs
+3. **BackfillDaemon** - Executes backfill jobs
+4. **AssetDaemon** - Auto-materializes assets based on policies
+5. **RunMonitoringDaemon** - Monitors run status
+6. **RunTimeoutDaemon** - Handles run timeouts
+7. **RunQueueDaemon** - Manages run queue and concurrency
+
+---
+
+## dagster-daemon liveness-check
+
+Check for recent heartbeats from the daemon to verify it's running.
+
+### Usage
+
+```bash
+dagster-daemon liveness-check
+```
+
+### Example
+
+```bash
+# Check if daemon is alive
+dagster-daemon liveness-check
+```
+
+### Output
+
+<CodeGroup>
+```bash Success
+Daemon live
+```
+
+```bash Failure
+Daemon(s) not running
+```
+</CodeGroup>
+
+### Exit Codes
+
+- `0` - Daemon is running
+- `1` - Daemon is not running or unhealthy
+
+### Use Cases
+
+**Health Check in Docker:**
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD dagster-daemon liveness-check || exit 1
+```
+
+**Kubernetes Liveness Probe:**
+```yaml
+livenessProbe:
+  exec:
+    command:
+    - dagster-daemon
+    - liveness-check
+  initialDelaySeconds: 30
+  periodSeconds: 30
+```
+
+**Monitoring Script:**
+```bash
+#!/bin/bash
+if ! dagster-daemon liveness-check; then
+  echo "Daemon is down, restarting..."
+  systemctl restart dagster-daemon
+fi
+```
+
+---
+
+## dagster-daemon wipe
+
+Wipe all heartbeat data from storage.
+
+<Info>
+  This command removes heartbeat metadata. It does not affect runs, schedules, or other data.
+</Info>
+
+### Usage
+
+```bash
+dagster-daemon wipe
+```
+
+### Example
+
+```bash
+# Clean up heartbeat storage
+dagster-daemon wipe
+```
+
+### Output
+
+```
+Daemon heartbeats wiped
+```
+
+### When to Use
+
+- After changing daemon configuration
+- When troubleshooting daemon issues
+- After instance migration
+- To clear stale heartbeat data
+
+---
+
+## dagster-daemon debug
+
+Daemon debugging utilities.
+
+### dagster-daemon debug heartbeat
+
+Read and write a test heartbeat to verify storage connectivity.
+
+```bash
+dagster-daemon debug heartbeat
+```
+
+### dagster-daemon debug heartbeat-dump
+
+Log all current heartbeat statuses.
+
+```bash
+dagster-daemon debug heartbeat-dump
+```
+
+#### Output
+
+```
+DaemonStatus(
+  daemon_type=SCHEDULER,
+  healthy=True,
+  last_heartbeat_time=2024-01-15T18:30:45.123456,
+  last_heartbeat_errors=[]
+)
+DaemonStatus(
+  daemon_type=SENSOR,
+  healthy=True,
+  last_heartbeat_time=2024-01-15T18:30:45.234567,
+  last_heartbeat_errors=[]
+)
+```
+
+### When to Use Debug Commands
+
+- Diagnosing daemon connectivity issues
+- Verifying storage backend is working
+- Troubleshooting heartbeat problems
+- Checking daemon health status
+
+---
+
+## Production Deployment
+
+### Running as a Service
+
+**Systemd Service (Linux):**
+
+```ini
+# /etc/systemd/system/dagster-daemon.service
+[Unit]
+Description=Dagster Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=dagster
+Group=dagster
+WorkingDirectory=/opt/dagster
+Environment="DAGSTER_HOME=/opt/dagster/dagster_home"
+ExecStart=/opt/dagster/venv/bin/dagster-daemon run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Start the service:**
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dagster-daemon
+sudo systemctl start dagster-daemon
+sudo systemctl status dagster-daemon
+```
+
+### Docker Deployment
+
+**Dockerfile:**
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Copy code
+COPY . .
+
+# Set environment
+ENV DAGSTER_HOME=/app/dagster_home
+
+# Run daemon
+CMD ["dagster-daemon", "run"]
+```
+
+**docker-compose.yml:**
+```yaml
+version: '3.8'
+services:
+  dagster-daemon:
+    build: .
+    container_name: dagster-daemon
+    restart: always
+    environment:
+      - DAGSTER_HOME=/opt/dagster/dagster_home
+      - DAGSTER_POSTGRES_HOST=postgres
+      - DAGSTER_POSTGRES_DB=dagster
+      - DAGSTER_POSTGRES_USER=dagster
+      - DAGSTER_POSTGRES_PASSWORD=dagster
+    volumes:
+      - ./dagster_home:/opt/dagster/dagster_home
+    depends_on:
+      - postgres
+    command: dagster-daemon run
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dagster-daemon
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dagster-daemon
+  template:
+    metadata:
+      labels:
+        app: dagster-daemon
+    spec:
+      containers:
+      - name: dagster-daemon
+        image: your-registry/dagster-daemon:latest
+        command: ["dagster-daemon", "run"]
+        env:
+        - name: DAGSTER_HOME
+          value: "/opt/dagster/dagster_home"
+        - name: DAGSTER_POSTGRES_HOST
+          value: "postgres-service"
+        volumeMounts:
+        - name: dagster-home
+          mountPath: /opt/dagster/dagster_home
+        livenessProbe:
+          exec:
+            command:
+            - dagster-daemon
+            - liveness-check
+          initialDelaySeconds: 30
+          periodSeconds: 30
+      volumes:
+      - name: dagster-home
+        persistentVolumeClaim:
+          claimName: dagster-home-pvc
+```
+
+---
+
+## Configuration
+
+### dagster.yaml
+
+Configure daemon behavior in your `dagster.yaml` file:
+
+```yaml
+# dagster.yaml
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 10
+    tag_concurrency_limits:
+      - key: "database"
+        value: "postgres"
+        limit: 2
+
+run_monitoring:
+  enabled: true
+  start_timeout_seconds: 180
+  cancel_timeout_seconds: 180
+  max_runtime_seconds: 3600
+
+schedule_executor:
+  module: dagster.core.scheduler
+  class: DagsterDaemonScheduler
+  
+sensor_executor:
+  module: dagster.core.scheduler.sensor
+  class: DagsterDaemonSensorExecutor
+
+auto_materialize:
+  enabled: true
+  run_tags:
+    source: "auto_materialize"
+  max_materializations_per_minute: 10
+```
+
+### Environment Variables
+
+<ParamField path="DAGSTER_HOME" type="path">
+  Directory containing the dagster.yaml instance configuration
+</ParamField>
+
+<ParamField path="DAGSTER_DAEMON_LOG_LEVEL" type="string">
+  Default log level for the daemon (overrides --log-level)
+</ParamField>
+
+<ParamField path="DAGSTER_DAEMON_HEARTBEAT_TOLERANCE" type="integer">
+  Seconds before considering a daemon unhealthy (default: 300)
+</ParamField>
+
+---
+
+## Monitoring
+
+### Logs
+
+Daemon logs are crucial for debugging. Common log locations:
+
+**Development:**
+```bash
+# Logs print to stdout when running interactively
+dagster-daemon run
+```
+
+**Systemd:**
+```bash
+# View systemd logs
+journalctl -u dagster-daemon -f
+```
+
+**Docker:**
+```bash
+# View container logs
+docker logs -f dagster-daemon
+```
+
+### Metrics
+
+Important metrics to monitor:
+
+1. **Heartbeat Health** - Use `liveness-check` regularly
+2. **Schedule Success Rate** - Track successful schedule evaluations
+3. **Sensor Lag** - Time between sensor evaluations
+4. **Queue Depth** - Number of queued runs
+5. **Daemon Uptime** - Continuous operation time
+
+### Alerts
+
+Set up alerts for:
+- Daemon process down
+- Heartbeat failures
+- Schedule evaluation errors
+- Sensor evaluation errors
+- Run queue backlog
+
+---
+
+## Troubleshooting
+
+### Daemon Not Starting
+
+**Check instance configuration:**
+```bash
+dagster instance info
+```
+
+**Verify workspace loads:**
+```bash
+python -c "from my_project import definitions"
+```
+
+**Check permissions:**
+```bash
+ls -la $DAGSTER_HOME
+```
+
+### Schedules Not Running
+
+1. **Verify daemon is running:**
+   ```bash
+   dagster-daemon liveness-check
+   ```
+
+2. **Check schedule is started:**
+   ```bash
+   dagster schedule list --running
+   ```
+
+3. **Review daemon logs for errors:**
+   ```bash
+   journalctl -u dagster-daemon -n 100
+   ```
+
+4. **Verify schedule cron expression:**
+   Test your cron at [crontab.guru](https://crontab.guru/)
+
+### Sensors Not Triggering
+
+1. **Check sensor evaluation logs:**
+   ```bash
+   dagster-daemon run --log-level debug
+   ```
+
+2. **Verify sensor is enabled:**
+   Check the UI or run `dagster sensor list`
+
+3. **Check sensor evaluation time:**
+   Sensors evaluate every 30 seconds by default
+
+### Memory Issues
+
+If the daemon is consuming too much memory:
+
+1. **Reduce concurrent evaluations:**
+   ```yaml
+   # dagster.yaml
+   sensor_executor:
+     config:
+       num_workers: 2  # Default is 4
+   ```
+
+2. **Limit run queue size:**
+   ```yaml
+   run_coordinator:
+     config:
+       max_concurrent_runs: 5
+   ```
+
+3. **Monitor and restart periodically:**
+   ```bash
+   # Add to crontab
+   0 2 * * * systemctl restart dagster-daemon
+   ```
+
+### High CPU Usage
+
+1. **Reduce sensor evaluation frequency:**
+   ```python
+   @sensor(
+       job=my_job,
+       minimum_interval_seconds=300  # Evaluate every 5 minutes
+   )
+   def my_sensor():
+       ...
+   ```
+
+2. **Optimize sensor code:**
+   Avoid expensive computations in sensor evaluation
+
+3. **Check for sensor errors:**
+   Failing sensors may retry aggressively
+
+### Storage Connection Issues
+
+**Test storage connectivity:**
+```bash
+dagster-daemon debug heartbeat
+```
+
+**Verify database is accessible:**
+```bash
+psql -h localhost -U dagster -d dagster -c "SELECT 1;"
+```
+
+**Check connection pool settings:**
+```yaml
+# dagster.yaml
+storage:
+  postgres:
+    postgres_url: postgresql://user:pass@host:5432/dagster
+    pool_size: 10
+    max_overflow: 20
+```
+
+---
+
+## Related
+
+- [dagster CLI](/api/cli/dagster) - Main Dagster CLI reference
+- [Instance Configuration](/deployment/dagster-instance) - Configure your instance
+- [Schedules](/concepts/automation/schedules) - Working with schedules
+- [Sensors](/concepts/automation/sensors) - Working with sensors
+- [Run Coordinator](/deployment/run-coordinator) - Configure run execution

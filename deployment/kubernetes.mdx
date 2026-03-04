@@ -1,0 +1,558 @@
+---
+title: Kubernetes Deployment
+description: Deploy Dagster to Kubernetes using the official Helm chart with production-ready configurations
+---
+
+# Kubernetes Deployment
+
+Dagster provides an official Helm chart for deploying to Kubernetes. This is the recommended approach for production workloads requiring scalability, high availability, and cloud-native infrastructure.
+
+## Prerequisites
+
+<Steps>
+  <Step title="Kubernetes Cluster">
+    Set up a Kubernetes cluster (version 1.18+):
+    - AWS EKS
+    - Google GKE
+    - Azure AKS
+    - Self-managed cluster
+  </Step>
+
+  <Step title="Install Helm">
+    Install Helm 3.x:
+    
+    ```bash
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    ```
+  </Step>
+
+  <Step title="Add Dagster Repository">
+    Add the Dagster Helm repository:
+    
+    ```bash
+    helm repo add dagster https://dagster-io.github.io/helm
+    helm repo update
+    ```
+  </Step>
+</Steps>
+
+## Quick Start Installation
+
+<Steps>
+  <Step title="Create namespace">
+    ```bash
+    kubectl create namespace dagster
+    ```
+  </Step>
+
+  <Step title="Install Dagster">
+    ```bash
+    helm install my-release dagster/dagster \
+      --namespace dagster \
+      --create-namespace
+    ```
+  </Step>
+
+  <Step title="Verify installation">
+    ```bash
+    kubectl get pods -n dagster
+    ```
+    
+    Expected output:
+    ```
+    NAME                                    READY   STATUS    RESTARTS   AGE
+    my-release-dagster-daemon-xxx           1/1     Running   0          2m
+    my-release-dagster-webserver-xxx        1/1     Running   0          2m
+    my-release-postgresql-0                 1/1     Running   0          2m
+    ```
+  </Step>
+</Steps>
+
+## Helm Chart Configuration
+
+The Dagster Helm chart is highly configurable through `values.yaml`. Here are key configuration options:
+
+### Chart Structure
+
+```yaml title="Chart.yaml (from helm/dagster/)"
+apiVersion: v2
+name: dagster
+version: 0.0.1-dev
+kubeVersion: ">= 1.18.0-0"
+description: The data orchestration platform built for productivity.
+type: application
+
+dependencies:
+  - name: dagster-user-deployments
+    version: 0.0.1-dev
+    condition: dagster-user-deployments.enableSubchart
+  - name: postgresql
+    version: 8.1.0
+    repository: https://raw.githubusercontent.com/bitnami/charts/eb5f9a9513d987b519f0ecd732e7031241c50328/bitnami
+    condition: postgresql.enabled
+  - name: rabbitmq
+    version: 6.16.3
+    repository: https://raw.githubusercontent.com/bitnami/charts/eb5f9a9513d987b519f0ecd732e7031241c50328/bitnami
+    condition: rabbitmq.enabled
+  - name: redis
+    version: 12.7.4
+    repository: https://raw.githubusercontent.com/bitnami/charts/eb5f9a9513d987b519f0ecd732e7031241c50328/bitnami
+    condition: redis.internal
+```
+
+### Basic Configuration
+
+<CodeGroup>
+
+```yaml title="values.yaml (minimal)"
+global:
+  postgresqlSecretName: "dagster-postgresql-secret"
+  dagsterHome: "/opt/dagster/dagster_home"
+
+dagsterWebserver:
+  replicaCount: 1
+  image:
+    repository: "docker.io/dagster/dagster-celery-k8s"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 80
+
+dagsterDaemon:
+  enabled: true
+
+postgresql:
+  enabled: true
+  postgresqlUsername: dagster
+  postgresqlPassword: dagster
+  postgresqlDatabase: dagster
+```
+
+```yaml title="values.yaml (production)"
+global:
+  postgresqlSecretName: "dagster-postgresql-secret"
+  dagsterHome: "/opt/dagster/dagster_home"
+  serviceAccountName: "dagster"
+
+dagsterWebserver:
+  replicaCount: 2
+  image:
+    repository: "docker.io/dagster/dagster-celery-k8s"
+    tag: "1.5.0"
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: LoadBalancer
+    port: 80
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  
+  readinessProbe:
+    httpGet:
+      path: "/server_info"
+      port: 80
+    periodSeconds: 20
+    timeoutSeconds: 10
+
+dagsterDaemon:
+  enabled: true
+  
+  runCoordinator:
+    enabled: true
+    type: QueuedRunCoordinator
+    config:
+      maxConcurrentRuns: 10
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Use external PostgreSQL for production
+postgresql:
+  enabled: false
+
+# Configure external PostgreSQL connection
+global:
+  postgresqlSecretName: "dagster-postgresql-secret"
+
+# Compute log storage (use S3, GCS, or Azure)
+computeLogManager:
+  type: S3ComputeLogManager
+  config:
+    s3ComputeLogManager:
+      bucket: "my-dagster-logs"
+      prefix: "dagster-logs/"
+      region: "us-west-2"
+```
+
+</CodeGroup>
+
+## Deploying User Code
+
+Dagster separates system components from user code. Deploy your code as separate pods:
+
+### User Code Deployment
+
+<Steps>
+  <Step title="Build user code image">
+    Create a Dockerfile for your Dagster project:
+    
+    ```dockerfile title="Dockerfile"
+    FROM python:3.10-slim
+    
+    WORKDIR /opt/dagster/app
+    
+    # Install dependencies
+    COPY requirements.txt .
+    RUN pip install -r requirements.txt
+    
+    # Copy Dagster code
+    COPY iris_analysis/ ./iris_analysis/
+    
+    # Expose gRPC port
+    EXPOSE 4000
+    
+    CMD ["dagster", "api", "grpc", "-h", "0.0.0.0", "-p", "4000", "-m", "iris_analysis"]
+    ```
+  </Step>
+
+  <Step title="Configure user deployments">
+    ```yaml title="values.yaml"
+    dagster-user-deployments:
+      enabled: true
+      enableSubchart: true
+      
+      deployments:
+        - name: "iris-analysis"
+          image:
+            repository: "my-registry/iris-analysis"
+            tag: "latest"
+            pullPolicy: Always
+          
+          dagsterApiGrpcArgs:
+            - "-m"
+            - "iris_analysis"
+          
+          port: 4000
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 250m
+              memory: 512Mi
+    ```
+  </Step>
+
+  <Step title="Apply configuration">
+    ```bash
+    helm upgrade my-release dagster/dagster \
+      --namespace dagster \
+      -f values.yaml
+    ```
+  </Step>
+</Steps>
+
+### Example User Code
+
+This example is from `examples/deploy_k8s/iris_analysis/`:
+
+```python title="definitions.py"
+import dagster as dg
+import pandas as pd
+
+@dg.asset
+def iris_dataset_size(context: dg.AssetExecutionContext) -> None:
+    df = pd.read_csv(
+        "https://docs.dagster.io/assets/iris.csv",
+        names=[
+            "sepal_length_cm",
+            "sepal_width_cm",
+            "petal_length_cm",
+            "petal_width_cm",
+            "species",
+        ],
+    )
+    
+    context.log.info(f"Loaded {df.shape[0]} data points.")
+
+defs = dg.Definitions(assets=[iris_dataset_size])
+```
+
+## Run Launchers
+
+Dagster supports two Kubernetes run launchers:
+
+### K8sRunLauncher
+
+Launches each run in a separate Kubernetes Job:
+
+```yaml title="values.yaml"
+runLauncher:
+  type: K8sRunLauncher
+  config:
+    k8sRunLauncher:
+      jobNamespace: dagster
+      loadInclusterConfig: true
+      kubeconfigFile: ~
+      
+      # Pod configuration for runs
+      envConfigMaps:
+        - name: dagster-pipeline-env
+      
+      envSecrets:
+        - name: dagster-aws-credentials
+      
+      resources:
+        limits:
+          cpu: 2000m
+          memory: 4Gi
+        requests:
+          cpu: 1000m
+          memory: 2Gi
+```
+
+### CeleryK8sRunLauncher
+
+Uses Celery for distributed task execution:
+
+```yaml title="values.yaml"
+runLauncher:
+  type: CeleryK8sRunLauncher
+  config:
+    celeryK8sRunLauncher:
+      image:
+        repository: "docker.io/dagster/dagster-celery-k8s"
+        tag: "1.5.0"
+      
+      workerQueues:
+        - name: "default"
+          replicaCount: 3
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+
+rabbitmq:
+  enabled: true
+```
+
+## Generated Instance Configuration
+
+The Helm chart automatically generates `dagster.yaml` from your values. Here's what it creates:
+
+```yaml title="ConfigMap: dagster-instance (generated)"
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dagster-instance
+data:
+  dagster.yaml: |
+    scheduler:
+      module: dagster.core.scheduler
+      class: DagsterDaemonScheduler
+    
+    schedule_storage:
+      module: dagster_postgres.schedule_storage
+      class: PostgresScheduleStorage
+      config:
+        postgres_db:
+          hostname: postgresql
+          username: dagster
+          password: dagster
+          db_name: dagster
+          port: 5432
+    
+    run_launcher:
+      module: dagster_k8s
+      class: K8sRunLauncher
+      config:
+        job_namespace: dagster
+        load_incluster_config: true
+    
+    run_storage:
+      module: dagster_postgres.run_storage
+      class: PostgresRunStorage
+      config:
+        postgres_db:
+          hostname: postgresql
+          username: dagster
+          password: dagster
+          db_name: dagster
+          port: 5432
+    
+    event_log_storage:
+      module: dagster_postgres.event_log
+      class: PostgresEventLogStorage
+      config:
+        postgres_db:
+          hostname: postgresql
+          username: dagster
+          password: dagster
+          db_name: dagster
+          port: 5432
+    
+    run_coordinator:
+      module: dagster.core.run_coordinator
+      class: QueuedRunCoordinator
+      config:
+        max_concurrent_runs: 10
+```
+
+## Production Best Practices
+
+<Warning>
+  Always use an external PostgreSQL database for production. The embedded PostgreSQL is not suitable for production workloads.
+</Warning>
+
+### High Availability
+
+```yaml title="values.yaml (HA configuration)"
+dagsterWebserver:
+  replicaCount: 3
+  
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                    - dagster-webserver
+            topologyKey: kubernetes.io/hostname
+
+# Only one daemon should run
+dagsterDaemon:
+  enabled: true
+  # Daemon does not support multiple replicas
+```
+
+### Resource Management
+
+```yaml title="values.yaml (resource limits)"
+dagsterWebserver:
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+dagsterDaemon:
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+runLauncher:
+  config:
+    k8sRunLauncher:
+      resources:
+        limits:
+          cpu: 4000m
+          memory: 8Gi
+        requests:
+          cpu: 2000m
+          memory: 4Gi
+```
+
+### Monitoring
+
+```yaml title="values.yaml (monitoring)"
+dagsterWebserver:
+  readinessProbe:
+    httpGet:
+      path: "/server_info"
+      port: 80
+    periodSeconds: 20
+    timeoutSeconds: 10
+    successThreshold: 1
+    failureThreshold: 3
+  
+  livenessProbe:
+    httpGet:
+      path: "/server_info"
+      port: 80
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 5
+  
+  startupProbe:
+    enabled: true
+    httpGet:
+      path: "/server_info"
+      port: 80
+    periodSeconds: 10
+    failureThreshold: 30
+```
+
+## Managing the Deployment
+
+<CodeGroup>
+
+```bash title="Upgrade release"
+helm upgrade my-release dagster/dagster \
+  --namespace dagster \
+  -f values.yaml
+```
+
+```bash title="View status"
+helm status my-release -n dagster
+kubectl get pods -n dagster
+```
+
+```bash title="View logs"
+# Webserver logs
+kubectl logs -n dagster -l component=dagster-webserver -f
+
+# Daemon logs
+kubectl logs -n dagster -l component=dagster-daemon -f
+
+# User code logs
+kubectl logs -n dagster -l component=user-code -f
+```
+
+```bash title="Access UI"
+# Port forward to local machine
+kubectl port-forward -n dagster svc/my-release-dagster-webserver 8080:80
+
+# Access at http://localhost:8080
+```
+
+```bash title="Uninstall"
+helm uninstall my-release -n dagster
+kubectl delete namespace dagster
+```
+
+</CodeGroup>
+
+<Info>
+  For detailed Helm chart configuration options, see the [values.yaml file](https://github.com/dagster-io/dagster/blob/master/helm/dagster/values.yaml) in the Dagster repository.
+</Info>
+
+## Next Steps
+
+- [Configure compute log storage](/deployment/architecture#compute-logs)
+- [Set up external PostgreSQL](/deployment/architecture#postgresql)
+- [Deploy to AWS EKS](/deployment/architecture#aws-eks)
+- [Monitor your deployment](/deployment/architecture#monitoring)

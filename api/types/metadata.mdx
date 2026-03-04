@@ -1,0 +1,564 @@
+---
+title: Metadata Types
+description: Metadata value types for attaching structured information to Dagster assets, ops, and events.
+---
+
+# Metadata Types
+
+Metadata allows you to attach structured information to assets, ops, and events in Dagster. This information is displayed in the Dagster UI and can be used for debugging, monitoring, and documentation.
+
+## MetadataValue
+
+Base class for all metadata values. Provides static constructor methods for creating typed metadata values.
+
+```python
+from dagster import AssetMaterialization, MetadataValue, asset
+
+@asset
+def my_dataset(context):
+    df = get_dataframe()
+    
+    yield AssetMaterialization(
+        asset_key="my_dataset",
+        metadata={
+            "num_rows": MetadataValue.int(len(df)),
+            "schema": MetadataValue.md(df.dtypes.to_markdown()),
+            "preview_url": MetadataValue.url("https://example.com/preview"),
+            "file_path": MetadataValue.path("/data/output.parquet"),
+        }
+    )
+    return df
+```
+
+### Static Constructors
+
+<ResponseField name="text" type="staticmethod">
+  Creates a text metadata value.
+  
+  **Parameters:**
+  - `text` (str): The text string for a metadata entry
+  
+  **Returns:** `TextMetadataValue`
+  
+  ```python
+  metadata = {"description": MetadataValue.text("User activity data")}
+  ```
+</ResponseField>
+
+<ResponseField name="url" type="staticmethod">
+  Creates a URL metadata value that renders as a clickable link in the UI.
+  
+  **Parameters:**
+  - `url` (str): The URL for a metadata entry
+  
+  **Returns:** `UrlMetadataValue`
+  
+  ```python
+  metadata = {"dashboard": MetadataValue.url("http://mycoolsite.com/dashboard")}
+  ```
+</ResponseField>
+
+<ResponseField name="path" type="staticmethod">
+  Creates a filesystem path metadata value.
+  
+  **Parameters:**
+  - `path` (str | PathLike): The path for a metadata entry
+  
+  **Returns:** `PathMetadataValue`
+  
+  ```python
+  metadata = {"output_file": MetadataValue.path("/data/processed/output.csv")}
+  ```
+</ResponseField>
+
+<ResponseField name="notebook" type="staticmethod">
+  Creates a notebook path metadata value. The UI will render the notebook inline.
+  
+  **Parameters:**
+  - `path` (str | PathLike): The path to a notebook
+  
+  **Returns:** `NotebookMetadataValue`
+  
+  ```python
+  metadata = {"analysis": MetadataValue.notebook("/notebooks/analysis.ipynb")}
+  ```
+</ResponseField>
+
+<ResponseField name="json" type="staticmethod">
+  Creates a JSON metadata value. The UI will render the JSON in a structured format.
+  
+  **Parameters:**
+  - `data` (Sequence[Any] | Mapping[str, Any]): JSON-serializable data
+  
+  **Returns:** `JsonMetadataValue`
+  
+  ```python
+  metadata = {
+      "config": MetadataValue.json({"batch_size": 100, "enabled": True})
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="md" type="staticmethod">
+  Creates a Markdown metadata value. The UI will render the markdown.
+  
+  **Parameters:**
+  - `data` (str): Markdown string
+  
+  **Returns:** `MarkdownMetadataValue`
+  
+  ```python
+  metadata = {
+      "report": MetadataValue.md("# Summary\n\n- Total: 1000\n- Errors: 5")
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="python_artifact" type="staticmethod">
+  Creates a reference to a Python artifact (class or function).
+  
+  **Parameters:**
+  - `python_artifact` (Callable): The Python class or function
+  
+  **Returns:** `PythonArtifactMetadataValue`
+  
+  ```python
+  metadata = {
+      "model_class": MetadataValue.python_artifact(MyMLModel),
+      "transform_fn": MetadataValue.python_artifact(transform_data)
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="float" type="staticmethod">
+  Creates a float metadata value.
+  
+  **Parameters:**
+  - `value` (float): The float value
+  
+  **Returns:** `FloatMetadataValue`
+  
+  ```python
+  metadata = {"accuracy": MetadataValue.float(0.95)}
+  ```
+</ResponseField>
+
+<ResponseField name="int" type="staticmethod">
+  Creates an integer metadata value.
+  
+  **Parameters:**
+  - `value` (int): The integer value
+  
+  **Returns:** `IntMetadataValue`
+  
+  ```python
+  metadata = {"num_rows": MetadataValue.int(10000)}
+  ```
+</ResponseField>
+
+<ResponseField name="bool" type="staticmethod">
+  Creates a boolean metadata value.
+  
+  **Parameters:**
+  - `value` (bool): The boolean value
+  
+  **Returns:** `BoolMetadataValue`
+  
+  ```python
+  metadata = {"is_valid": MetadataValue.bool(True)}
+  ```
+</ResponseField>
+
+<ResponseField name="timestamp" type="staticmethod">
+  Creates a timestamp metadata value.
+  
+  **Parameters:**
+  - `value` (float | datetime): Unix timestamp or datetime object (must have timezone)
+  
+  **Returns:** `TimestampMetadataValue`
+  
+  ```python
+  from datetime import datetime, timezone
+  
+  metadata = {
+      "processed_at": MetadataValue.timestamp(datetime.now(timezone.utc))
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="dagster_run" type="staticmethod">
+  Creates a reference to a Dagster run.
+  
+  **Parameters:**
+  - `run_id` (str): The ID of the run
+  
+  **Returns:** `DagsterRunMetadataValue`
+  
+  ```python
+  metadata = {"source_run": MetadataValue.dagster_run(context.run_id)}
+  ```
+</ResponseField>
+
+<ResponseField name="asset" type="staticmethod">
+  Creates a reference to a Dagster asset. The UI will render a link to the asset.
+  
+  **Parameters:**
+  - `asset_key` (AssetKey): The asset key
+  
+  **Returns:** `DagsterAssetMetadataValue`
+  
+  ```python
+  from dagster import AssetKey
+  
+  metadata = {"source_table": MetadataValue.asset(AssetKey("raw_data"))}
+  ```
+</ResponseField>
+
+<ResponseField name="job" type="staticmethod">
+  Creates a reference to a Dagster job.
+  
+  **Parameters:**
+  - `job_name` (str): The name of the job
+  - `location_name` (str): The code location name
+  - `repository_name` (str, optional): The repository name
+  
+  **Returns:** `DagsterJobMetadataValue`
+  
+  ```python
+  metadata = {
+      "source_job": MetadataValue.job("etl_job", "production")
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="table" type="staticmethod">
+  Creates tabular metadata that renders as a table in the UI.
+  
+  **Parameters:**
+  - `records` (Sequence[TableRecord]): List of table records
+  - `schema` (TableSchema, optional): Optional table schema
+  
+  **Returns:** `TableMetadataValue`
+  
+  ```python
+  from dagster import TableRecord, TableSchema, TableColumn
+  
+  metadata = {
+      "summary": MetadataValue.table(
+          records=[
+              TableRecord({"category": "A", "count": 100}),
+              TableRecord({"category": "B", "count": 200})
+          ],
+          schema=TableSchema(
+              columns=[
+                  TableColumn(name="category", type="string"),
+                  TableColumn(name="count", type="int")
+              ]
+          )
+      )
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="table_schema" type="staticmethod">
+  Creates table schema metadata.
+  
+  **Parameters:**
+  - `schema` (TableSchema): The table schema
+  
+  **Returns:** `TableSchemaMetadataValue`
+  
+  ```python
+  from dagster import TableSchema, TableColumn
+  
+  schema = TableSchema(
+      columns=[
+          TableColumn(name="id", type="int"),
+          TableColumn(name="name", type="string"),
+          TableColumn(name="created_at", type="timestamp")
+      ]
+  )
+  metadata = {"schema": MetadataValue.table_schema(schema)}
+  ```
+</ResponseField>
+
+<ResponseField name="column_lineage" type="staticmethod">
+  Creates column lineage metadata showing dependencies between columns.
+  
+  **Parameters:**
+  - `lineage` (TableColumnLineage): The column lineage
+  
+  **Returns:** `TableColumnLineageMetadataValue`
+  
+  ```python
+  from dagster import TableColumnLineage, TableColumnDep, AssetKey
+  
+  lineage = TableColumnLineage(
+      deps_by_column={
+          "full_name": [
+              TableColumnDep(AssetKey("users"), "first_name"),
+              TableColumnDep(AssetKey("users"), "last_name")
+          ]
+      }
+  )
+  metadata = {"dagster/column_lineage": lineage}
+  ```
+</ResponseField>
+
+<ResponseField name="null" type="staticmethod">
+  Creates a null metadata value.
+  
+  **Returns:** `NullMetadataValue`
+  
+  ```python
+  metadata = {"optional_field": MetadataValue.null()}
+  ```
+</ResponseField>
+
+<ResponseField name="pool" type="staticmethod">
+  Creates a reference to a concurrency pool.
+  
+  **Parameters:**
+  - `pool` (str): The pool identifier
+  
+  **Returns:** `PoolMetadataValue`
+  
+  ```python
+  metadata = {"execution_pool": MetadataValue.pool("default")}
+  ```
+</ResponseField>
+
+## Table Metadata Types
+
+### TableRecord
+
+Represents one record in a table. Used with `MetadataValue.table()`.
+
+```python
+from dagster import TableRecord
+
+record = TableRecord({
+    "column1": "value1",
+    "column2": 42,
+    "column3": 3.14,
+    "column4": True
+})
+```
+
+<ParamField path="data" type="Mapping[str, str | int | float | bool | None]" required>
+  Dictionary mapping column names to values. Values must be strings, integers, floats, bools, or None.
+</ParamField>
+
+### TableSchema
+
+Representation of a schema for tabular data.
+
+```python
+from dagster import TableSchema, TableColumn, TableColumnConstraints, TableConstraints
+
+schema = TableSchema(
+    columns=[
+        TableColumn(
+            name="id",
+            type="int",
+            constraints=TableColumnConstraints(nullable=False, unique=True)
+        ),
+        TableColumn(
+            name="email",
+            type="string",
+            description="User email address",
+            constraints=TableColumnConstraints(nullable=False, unique=True)
+        ),
+        TableColumn(name="age", type="int"),
+    ],
+    constraints=TableConstraints(other=["age >= 0"])
+)
+```
+
+<ParamField path="columns" type="Sequence[TableColumn]" required>
+  List of column definitions.
+</ParamField>
+
+<ParamField path="constraints" type="TableConstraints">
+  Optional table-level constraints.
+</ParamField>
+
+### TableColumn
+
+Descriptor for a table column.
+
+<ParamField path="name" type="str" required>
+  Column name.
+</ParamField>
+
+<ParamField path="type" type="str">
+  Column type (e.g., "string", "int", "float", "bool", "timestamp"). Defaults to "string".
+</ParamField>
+
+<ParamField path="description" type="str">
+  Optional column description.
+</ParamField>
+
+<ParamField path="constraints" type="TableColumnConstraints">
+  Column-level constraints.
+</ParamField>
+
+<ParamField path="tags" type="Mapping[str, str]">
+  Optional tags for filtering or organizing columns.
+</ParamField>
+
+### TableColumnConstraints
+
+Constraints for a table column.
+
+<ParamField path="nullable" type="bool">
+  Whether the column can hold null values. Defaults to True.
+</ParamField>
+
+<ParamField path="unique" type="bool">
+  Whether all values in the column must be unique. Defaults to False.
+</ParamField>
+
+<ParamField path="other" type="Sequence[str]">
+  List of arbitrary constraint descriptions (e.g., less than or equal to 100, starts with A).
+</ParamField>
+
+### TableConstraints
+
+Table-level constraints.
+
+<ParamField path="other" type="Sequence[str]" required>
+  Descriptions of arbitrary table-level constraints (e.g., ["column_a > column_b"]).
+</ParamField>
+
+### TableColumnLineage
+
+Represents column-level lineage for an asset.
+
+```python
+from dagster import TableColumnLineage, TableColumnDep, AssetKey, asset, MaterializeResult
+
+@asset(deps=[AssetKey("source_a"), AssetKey("source_b")])
+def combined_data():
+    yield MaterializeResult(
+        metadata={
+            "dagster/column_lineage": TableColumnLineage(
+                deps_by_column={
+                    "full_name": [
+                        TableColumnDep(AssetKey("source_a"), "first_name"),
+                        TableColumnDep(AssetKey("source_a"), "last_name"),
+                    ],
+                    "total_amount": [
+                        TableColumnDep(AssetKey("source_b"), "amount"),
+                    ]
+                }
+            )
+        }
+    )
+```
+
+<ParamField path="deps_by_column" type="Mapping[str, Sequence[TableColumnDep]]" required>
+  Mapping from output column names to the columns they depend on.
+</ParamField>
+
+### TableColumnDep
+
+Identifier for a column in an asset.
+
+<ParamField path="asset_key" type="AssetKey" required>
+  The asset key containing the column.
+</ParamField>
+
+<ParamField path="column_name" type="str" required>
+  The name of the column.
+</ParamField>
+
+## Usage Examples
+
+### Asset Materialization with Metadata
+
+```python
+from dagster import asset, MaterializeResult, MetadataValue
+import pandas as pd
+
+@asset
+def processed_data():
+    df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+    
+    return MaterializeResult(
+        metadata={
+            "num_rows": len(df),
+            "columns": MetadataValue.json(list(df.columns)),
+            "sample": MetadataValue.md(df.head().to_markdown()),
+            "size_bytes": MetadataValue.float(df.memory_usage(deep=True).sum()),
+        }
+    )
+```
+
+### Op with Metadata
+
+```python
+from dagster import op, Output, MetadataValue
+
+@op
+def process_file(context):
+    file_path = "/data/input.csv"
+    result = process(file_path)
+    
+    yield Output(
+        value=result,
+        metadata={
+            "input_file": MetadataValue.path(file_path),
+            "rows_processed": MetadataValue.int(len(result)),
+            "processing_time_ms": MetadataValue.float(123.45),
+        }
+    )
+```
+
+### Table Schema Metadata
+
+```python
+from dagster import asset, TableSchema, TableColumn, MetadataValue
+
+@asset(
+    metadata={
+        "schema": MetadataValue.table_schema(
+            TableSchema(
+                columns=[
+                    TableColumn(name="user_id", type="int"),
+                    TableColumn(name="email", type="string"),
+                    TableColumn(name="created_at", type="timestamp"),
+                ]
+            )
+        )
+    }
+)
+def users_table():
+    return query_users()
+```
+
+## Automatic Metadata Conversion
+
+Dagster automatically converts simple Python types to metadata values:
+
+```python
+from dagster import asset
+
+@asset
+def my_asset():
+    return MaterializeResult(
+        metadata={
+            "count": 100,              # Converted to IntMetadataValue
+            "rate": 0.95,              # Converted to FloatMetadataValue  
+            "description": "text",     # Converted to TextMetadataValue
+            "enabled": True,           # Converted to BoolMetadataValue
+        }
+    )
+```
+
+## See Also
+
+- [Assets](/concepts/assets/software-defined-assets) - Learn about defining assets
+- [Ops](/concepts/ops-jobs/ops) - Learn about ops and outputs
+- [Config Types](/api/types/config) - Learn about configuration types
+- [Partition Types](/api/types/partitions) - Learn about partition definitions
